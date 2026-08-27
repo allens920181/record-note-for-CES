@@ -307,3 +307,7 @@ a.list-item:hover { border-color: var(--accent); }
   display: flex; justify-content: center; align-items: flex-start;
 }
 .pdf-canvas { background: #fff; box-shadow: var(--shadow); max-width: 100%; }
+
+/* Work-time slots schedule effort, not a meeting — they produce no file. */
+.slot-row.is-work { opacity: .78; }
+.slot-row.is-work select, .slot-row.is-work input { border-style: dashed; }

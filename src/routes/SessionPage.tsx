@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, saveNote } from '../db'
-import type { TranscriptSegment } from '../db/schema'
+import type { SessionKind, TranscriptSegment } from '../db/schema'
+import { SESSION_KIND_LABEL } from '../db/schema'
 import { readFile, rootStatus } from '../storage/fsRoot'
 import { runTranscription } from '../stt/transcribe'
 import type { RunProgress } from '../stt/transcribe'
@@ -203,6 +204,7 @@ export function SessionPage() {
     )
 
   const hasTranscript = segments.length > 0
+  const kindLabel = SESSION_KIND_LABEL[(session.kind ?? 'lecture') as SessionKind]
 
   return (
     <>
@@ -211,7 +213,7 @@ export function SessionPage() {
           items={[
             { label: '學期', to: '/' },
             { label: course?.name ?? '…', to: course ? `/course/${course.id}` : undefined },
-            { label: `第 ${session.index} 週` },
+            { label: `第 ${session.index} 週 · ${kindLabel}` },
           ]}
         />
       </TopBar>
@@ -220,7 +222,8 @@ export function SessionPage() {
         <div className="ws-head">
           <div className="grow" style={{ minWidth: '12rem' }}>
             <div className="ws-title">
-              第 {session.index} 週{session.topic ? ` · ${session.topic}` : ''}
+              第 {session.index} 週 · {kindLabel}
+              {session.topic ? ` · ${session.topic}` : ''}
             </div>
             <div className="ws-sub mono">{session.date}</div>
           </div>

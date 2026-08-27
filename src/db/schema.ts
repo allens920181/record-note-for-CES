@@ -2,11 +2,33 @@
 // off a session. Ids are strings so records can be exported and re-imported
 // across machines without renumbering.
 
+/**
+ * What a scheduled block of time actually is. Lectures and discussions are
+ * meetings worth recording and each gets its own weekly file; work time is a
+ * block set aside for coursework and produces no recording at all.
+ */
+export type SlotKind = 'lecture' | 'discussion' | 'work'
+
+export const SLOT_KIND_LABEL: Record<SlotKind, string> = {
+  lecture: '正課',
+  discussion: '分組討論',
+  work: '作業時間',
+}
+
+/** Only these kinds turn into weekly files when the timetable is expanded. */
+export const MEETING_KINDS: SlotKind[] = ['lecture', 'discussion']
+
+export function isMeetingKind(kind: SlotKind | undefined): boolean {
+  return MEETING_KINDS.includes(kind ?? 'lecture')
+}
+
 export interface ClassSlot {
   weekday: number // 0 = Sunday
   start: string // "19:00"
   end: string // "22:00"
   room?: string
+  /** Absent on slots created before kinds existed; treat those as lectures. */
+  kind?: SlotKind
 }
 
 export interface Term {
@@ -33,13 +55,28 @@ export interface Course {
   createdAt: number
 }
 
+/** A session is always a meeting; work time never becomes one. */
+export type SessionKind = 'lecture' | 'discussion'
+
+export const SESSION_KIND_LABEL: Record<SessionKind, string> = {
+  lecture: '正課',
+  discussion: '分組討論',
+}
+
 export interface Session {
   id: string
   courseId: string
-  index: number // 第 N 週
+  /**
+   * Teaching week number, counted from the term's start date. Several sessions
+   * can share one — a week with both a lecture and a discussion has two files
+   * that are both "第 3 週".
+   */
+  index: number
   date: string // ISO yyyy-mm-dd
   topic: string
   canceled: boolean
+  /** Absent on sessions created before kinds existed; treat those as lectures. */
+  kind?: SessionKind
   createdAt: number
 }
 

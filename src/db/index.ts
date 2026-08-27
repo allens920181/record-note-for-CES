@@ -2,11 +2,12 @@ import Dexie from 'dexie'
 import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
 import { deleteFile, deleteDir } from '../storage/fsRoot'
-import { DEFAULT_SETTINGS } from './schema'
+import { DEFAULT_SETTINGS, isMeetingKind } from './schema'
 import type {
   AppSettings,
   Attachment,
   ClassSlot,
+  SessionKind,
   Course,
   Note,
   Recording,
@@ -21,6 +22,7 @@ export type {
   AppSettings,
   Attachment,
   ClassSlot,
+  SessionKind,
   Course,
   Note,
   Recording,
@@ -126,15 +128,22 @@ export async function deleteCourseCascade(courseId: string): Promise<void> {
 // ── sessions ──────────────────────────────────────────────────────────
 
 /**
- * Appends the next week to a course. The date is stepped a week on from the
- * last session so a run of weekly classes fills in with one click each;
- * Phase 2 replaces this with generation from the course timetable.
+ * Adds one more meeting to a course, a week on from the latest one. Useful for
+ * a one-off extra session; the timetable generator covers the regular run.
  */
-export async function appendSession(courseId: string): Promise<string> {
-  const existing = await db.sessions.where('courseId').equals(courseId).sortBy('index')
+export async function appendSession(
+  courseId: string,
+  kind: SessionKind = 'lecture',
+): Promise<string> {
+  const existing = await db.sessions.where('courseId').equals(courseId).toArray()
+  existing.sort((a, b) => a.date.localeCompare(b.date))
   const last = existing[existing.length - 1]
-  const index = last ? last.index + 1 : 1
   const date = last ? addDays(last.date, 7) : todayISO()
+
+  const course = await db.courses.get(courseId)
+  const term = course ? await db.terms.get(course.termId) : undefined
+  const index = term ? weekNumberOf(term.startDate, date) : (last?.index ?? 0) + 1
+
   const id = newId('sess')
   await db.sessions.add({
     id,
@@ -143,6 +152,7 @@ export async function appendSession(courseId: string): Promise<string> {
     date,
     topic: '',
     canceled: false,
+    kind,
     createdAt: Date.now(),
   })
   return id
@@ -161,58 +171,98 @@ export function nextWeekdayOnOrAfter(iso: string, weekday: number): string {
 export interface GenerateResult {
   created: number
   skipped: number
+  /** Work-time slots are scheduled but produce no file; reported so the UI can say so. */
+  workSlots: number
 }
 
 /**
- * Fills a course with one session per teaching week, dated from its timetable.
+ * Which teaching week a date falls in, counted in 7-day windows from the term's
+ * start. Two meetings in the same window share a number, so a week with both a
+ * lecture and a discussion yields two files that are both "第 N 週".
+ */
+export function weekNumberOf(termStart: string, date: string): number {
+  const start = new Date(`${termStart}T00:00:00`).getTime()
+  const at = new Date(`${date}T00:00:00`).getTime()
+  const days = Math.floor((at - start) / 86_400_000)
+  return Math.max(1, Math.floor(days / 7) + 1)
+}
+
+/**
+ * Expands a course's timetable into weekly files.
  *
- * One session per week rather than per meeting: the whole point of the weekly
- * file is that a week's material lives in one place. A course that meets twice
- * a week can still get a second file from "新增週次".
+ * One file per meeting, not per week: a course with a lecture on Wednesday and
+ * a group discussion on Monday holds two separate recordings that week, and two
+ * recordings cannot share one timeline. Both carry the same week number.
  *
- * Weeks that already have a session on the same date are left alone, so this is
- * safe to run again after adding a slot or extending the term.
+ * Work-time slots are skipped entirely — that is time set aside for coursework,
+ * not a meeting to record.
+ *
+ * A meeting that already exists on the same date and of the same kind is left
+ * alone, so this is safe to run again after adding a slot or extending a term.
  */
 export async function generateSessionsFromTimetable(courseId: string): Promise<GenerateResult> {
   const course = await db.courses.get(courseId)
   if (!course) throw new Error('找不到這門課')
-  if (course.slots.length === 0) throw new Error('這門課還沒設定上課時段')
+  const meetingSlots = course.slots.filter((s) => isMeetingKind(s.kind))
+  const workSlots = course.slots.length - meetingSlots.length
+  if (meetingSlots.length === 0) {
+    throw new Error(
+      workSlots > 0
+        ? '這門課只設了作業時間。作業時間不會產生週次檔案，請至少加一個正課或分組討論的時段。'
+        : '這門課還沒設定上課時段',
+    )
+  }
   const term = await db.terms.get(course.termId)
   if (!term) throw new Error('找不到這門課所屬的學期')
 
-  // Anchor on the earliest weekday in the week so dates run in teaching order.
-  const weekday = [...course.slots].sort((a, b) => a.weekday - b.weekday)[0].weekday
-  const firstDate = nextWeekdayOnOrAfter(term.startDate, weekday)
-
   const existing = await db.sessions.where('courseId').equals(courseId).toArray()
-  const takenDates = new Set(existing.map((s) => s.date))
-  let nextIndex = existing.reduce((max, s) => Math.max(max, s.index), 0)
+  const taken = new Set(existing.map((s) => `${s.date}|${s.kind ?? 'lecture'}`))
 
   const rows: Session[] = []
-  for (let week = 0; week < term.weeks; week++) {
-    const date = addDays(firstDate, week * 7)
-    if (takenDates.has(date)) continue
-    rows.push({
-      id: newId('sess'),
-      courseId,
-      index: ++nextIndex,
-      date,
-      topic: '',
-      canceled: false,
-      createdAt: Date.now(),
-    })
+  for (const slot of meetingSlots) {
+    const kind: SessionKind = slot.kind === 'discussion' ? 'discussion' : 'lecture'
+    const first = nextWeekdayOnOrAfter(term.startDate, slot.weekday)
+    for (let week = 0; week < term.weeks; week++) {
+      const date = addDays(first, week * 7)
+      const key = `${date}|${kind}`
+      if (taken.has(key)) continue
+      taken.add(key)
+      rows.push({
+        id: newId('sess'),
+        courseId,
+        index: weekNumberOf(term.startDate, date),
+        date,
+        topic: '',
+        canceled: false,
+        kind,
+        createdAt: Date.now(),
+      })
+    }
   }
 
   if (rows.length > 0) await db.sessions.bulkAdd(rows)
-  return { created: rows.length, skipped: term.weeks - rows.length }
+  const wanted = meetingSlots.length * term.weeks
+  return { created: rows.length, skipped: wanted - rows.length, workSlots }
 }
 
-/** Renumbers a course's sessions by date so "第 N 週" stays in teaching order. */
+/**
+ * Recomputes "第 N 週" from each session's date, so the numbering survives a
+ * deletion or a manually added meeting. Sessions in the same 7-day window from
+ * the term's start share a number by design.
+ */
 export async function renumberSessions(courseId: string): Promise<void> {
+  const course = await db.courses.get(courseId)
+  const term = course ? await db.terms.get(course.termId) : undefined
   const sessions = await db.sessions.where('courseId').equals(courseId).toArray()
-  sessions.sort((a, b) => a.date.localeCompare(b.date))
+  if (sessions.length === 0) return
+
+  // Without a term to anchor on, fall back to the earliest session's own week.
+  const anchor = term?.startDate ?? sessions.map((s) => s.date).sort()[0]
   await Promise.all(
-    sessions.map((s, i) => (s.index === i + 1 ? undefined : db.sessions.update(s.id, { index: i + 1 }))),
+    sessions.map((s) => {
+      const week = weekNumberOf(anchor, s.date)
+      return s.index === week ? undefined : db.sessions.update(s.id, { index: week })
+    }),
   )
 }
 
