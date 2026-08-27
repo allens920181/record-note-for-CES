@@ -49,7 +49,12 @@ export function SessionPage() {
     () => db.transcripts.where('sessionId').equals(sessionId).last(),
     [sessionId],
   )
-  const note = useLiveQuery(() => db.notes.get(sessionId), [sessionId])
+  // `?? null` so "still loading" and "no note yet" are distinguishable:
+  // useLiveQuery yields undefined for both, and a session that has never been
+  // written to has no row — which used to mean the editor never mounted, and
+  // therefore no row could ever be written. A deadlock hidden by every test
+  // seeding a note first.
+  const note = useLiveQuery(async () => (await db.notes.get(sessionId)) ?? null, [sessionId])
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const editorRef = useRef<NoteEditorHandle | null>(null)
@@ -64,6 +69,10 @@ export function SessionPage() {
   // null means "follow the default": open while there is nothing to transcribe,
   // closed once the two panes need the height.
   const [planOpen, setPlanOpen] = useState<boolean | null>(null)
+  /** The left pane shows the week's handouts instead of its usual content. */
+  const [showFiles, setShowFiles] = useState(false)
+  /** Below 60rem only one pane fits; this says which. */
+  const [narrowPane, setNarrowPane] = useState<'left' | 'note'>('left')
 
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<RunProgress | null>(null)
@@ -72,9 +81,12 @@ export function SessionPage() {
   const [storageReady, setStorageReady] = useState<boolean | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
+  // Re-checked per session rather than once per mount: moving between weeks
+  // keeps this component mounted, so an empty dependency list would report the
+  // storage state from whenever the workspace was first opened.
   useEffect(() => {
     void rootStatus().then((s) => setStorageReady(s === 'ready'))
-  }, [])
+  }, [sessionId])
 
   // Pull the stored audio out of the local folder and hand the player a URL.
   useEffect(() => {
@@ -150,18 +162,27 @@ export function SessionPage() {
   }, [])
 
   const noteTimer = useRef<number | null>(null)
+  // Held so unmount can write it: cancelling the timer without flushing loses
+  // whatever was typed in the last 600ms, and leaving a page is exactly when
+  // people stop typing.
+  const pendingNote = useRef<string | null>(null)
   const onNoteChange = useCallback(
     (value: string) => {
+      pendingNote.current = value
       if (noteTimer.current) window.clearTimeout(noteTimer.current)
-      noteTimer.current = window.setTimeout(() => void saveNote(sessionId, value), 600)
+      noteTimer.current = window.setTimeout(() => {
+        pendingNote.current = null
+        void saveNote(sessionId, value)
+      }, 600)
     },
     [sessionId],
   )
   useEffect(
     () => () => {
       if (noteTimer.current) window.clearTimeout(noteTimer.current)
+      if (pendingNote.current !== null) void saveNote(sessionId, pendingNote.current)
     },
-    [],
+    [sessionId],
   )
 
   const handleFile = useCallback(
@@ -196,6 +217,10 @@ export function SessionPage() {
   )
 
   const plan = useLiveQuery(() => db.weekPlans.get(sessionId), [sessionId])
+  const fileCount = useLiveQuery(
+    () => db.attachments.where({ scope: 'session', ownerId: sessionId }).count(),
+    [sessionId],
+  ) ?? 0
   const planDone = plan?.items.filter((i) => i.done).length ?? 0
   const planTotal = plan?.items.length ?? 0
 
@@ -311,137 +336,85 @@ export function SessionPage() {
           </div>
         )}
 
-        {/* ── before there's a transcript: record or upload ───────── */}
-        {!hasTranscript && (
-          <div className="page" style={{ paddingTop: '1.5rem' }}>
-            {storageReady === false && (
-              <div className="notice warn" style={{ marginBottom: '1rem' }}>
-                還沒設定儲存位置，錄音與轉錄都無法開始。請先到 <Link to="/settings">設定</Link>{' '}
-                指定一個本機資料夾。
-              </div>
-            )}
+        {/* ── two panes, always ───────────────────────────────────
+            The note editor is never conditional: a lecture you are not allowed
+            to record, or a folder you have not set up yet, still needs somewhere
+            to type. Only the left pane changes with the session's state. */}
+        <div className="pane-tabs">
+          <button
+            className={`ptab${narrowPane === 'left' ? ' active' : ''}`}
+            onClick={() => setNarrowPane('left')}
+          >
+            {hasTranscript ? `逐字稿 · ${segments.length} 段` : '錄音與上傳'}
+          </button>
+          <button
+            className={`ptab${narrowPane === 'note' ? ' active' : ''}`}
+            onClick={() => setNarrowPane('note')}
+          >
+            我的筆記
+          </button>
+        </div>
 
-            {busy ? (
-              <div className="card">
-                <h2>處理中</h2>
-                <p className="small muted" style={{ margin: '.4rem 0 .9rem' }}>
-                  {progress?.stage ?? '準備中'}
-                  {progress && progress.total > 0 ? `（${progress.done} / ${progress.total}）` : ''}
-                </p>
-                <div className="progress">
-                  <div
-                    style={{
-                      width:
-                        progress && progress.total > 0
-                          ? `${(progress.done / progress.total) * 100}%`
-                          : '15%',
-                    }}
-                  />
-                </div>
-                <p className="small muted" style={{ marginTop: '.9rem' }}>
-                  第一次使用會下載約 32 MB 的音訊處理引擎。之後就不用再下載了。
-                  請保持這個分頁開著。
-                </p>
-                <button
-                  className="btn danger sm"
-                  style={{ marginTop: '.6rem' }}
-                  onClick={() => abortRef.current?.abort()}
-                >
-                  取消
-                </button>
-              </div>
-            ) : (
-              <div className="intake">
-                <RecorderPanel
-                  sessionId={sessionId}
-                  disabled={storageReady === false}
-                  onFinished={(file) => void handleFile(file)}
-                />
+        <div className="panes" data-show={narrowPane}>
+          <section className="pane">
+            <div className="pane-head">
+              <span className="grow">
+                {showFiles
+                  ? '這週的講義'
+                  : hasTranscript
+                    ? `逐字稿 · ${segments.length} 段`
+                    : '錄音與上傳'}
+              </span>
+              {hasTranscript && !showFiles && (
+                <>
+                  <button
+                    className="btn ghost sm"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => void addSelectionToGlossary()}
+                    title="把選取的專有名詞加入這門課的詞彙表"
+                  >
+                    選取加入詞彙表
+                  </button>
+                  <button
+                    className="btn ghost sm"
+                    onClick={() => setFollow((f) => !f)}
+                    title="播放時自動捲到目前這一句"
+                  >
+                    {follow ? '跟播中' : '不跟播'}
+                  </button>
+                  <button className="btn ghost sm" onClick={() => setEditingTranscript((v) => !v)}>
+                    {editingTranscript ? '完成編輯' : '修正錯字'}
+                  </button>
+                </>
+              )}
+              {/* Handouts stay reachable after transcription — the slides often
+                  arrive later than the recording. */}
+              <button
+                className={`btn ghost sm${showFiles ? ' active' : ''}`}
+                aria-pressed={showFiles}
+                onClick={() => setShowFiles((v) => !v)}
+              >
+                {showFiles ? '返回' : `講義${fileCount > 0 ? ` ${fileCount}` : ''}`}
+              </button>
+            </div>
 
-                <label
-                  className={`dropzone${dragOver ? ' over' : ''}`}
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    setDragOver(true)
-                  }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    setDragOver(false)
-                    const file = e.dataTransfer.files[0]
-                    if (file) void handleFile(file)
-                  }}
-                >
-                  <input
-                    type="file"
-                    accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
-                    style={{ display: 'none' }}
-                    disabled={storageReady === false}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) void handleFile(file)
-                      e.target.value = ''
-                    }}
-                  />
-                  <strong>或上傳已經錄好的檔案</strong>
-                  <div style={{ marginTop: '.4rem' }}>
-                    拖進來，或點一下選檔案。支援 mp3 / m4a / wav / ogg / webm / mp4。
+            {glossaryNote && <div className="pane-flash">{glossaryNote}</div>}
+
+            <div className="pane-body" ref={listRef}>
+              {showFiles ? (
+                course && (
+                  <div style={{ padding: '.9rem' }}>
+                    <AttachmentList
+                      scope="session"
+                      ownerId={sessionId}
+                      courseId={course.id}
+                      kinds={['handout', 'reading', 'other']}
+                      title="這週的講義"
+                      hint="老師這週發的投影片或補充資料。PDF 可以直接在這裡讀。"
+                    />
                   </div>
-                </label>
-              </div>
-            )}
-
-            {error && (
-              <div className="notice err" style={{ marginTop: '1rem' }}>
-                <strong>失敗</strong>
-                <pre>{error}</pre>
-              </div>
-            )}
-
-            {course && (
-              <div style={{ marginTop: '1.5rem' }}>
-                <AttachmentList
-                  scope="session"
-                  ownerId={sessionId}
-                  courseId={course.id}
-                  kinds={['handout', 'reading', 'other']}
-                  title="這週的講義"
-                  hint="老師這週發的投影片或補充資料。PDF 可以直接在這裡讀。"
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── the two panes ──────────────────────────────────────── */}
-        {hasTranscript && (
-          <div className="panes">
-            <section className="pane">
-              <div className="pane-head">
-                <span className="grow">逐字稿 · {segments.length} 段</span>
-                <button
-                  className="btn ghost sm"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => void addSelectionToGlossary()}
-                  title="把選取的專有名詞加入這門課的詞彙表"
-                >
-                  選取加入詞彙表
-                </button>
-                <button
-                  className="btn ghost sm"
-                  onClick={() => setFollow((f) => !f)}
-                  title="播放時自動捲到目前這一句"
-                >
-                  {follow ? '跟播中' : '不跟播'}
-                </button>
-                <button className="btn ghost sm" onClick={() => setEditingTranscript((v) => !v)}>
-                  {editingTranscript ? '完成編輯' : '修正錯字'}
-                </button>
-              </div>
-
-              {glossaryNote && <div className="pane-flash">{glossaryNote}</div>}
-
-              <div className="pane-body" ref={listRef}>
+                )
+              ) : hasTranscript ? (
                 <div className="tx-list">
                   {segments.map((seg, i) => (
                     <div
@@ -464,8 +437,106 @@ export function SessionPage() {
                     </div>
                   ))}
                 </div>
-              </div>
+              ) : (
+                <div style={{ padding: '1.1rem .9rem 2rem' }}>
+                  {storageReady === false && (
+                    <div className="notice warn" style={{ marginBottom: '1rem' }}>
+                      還沒設定儲存位置，錄音與轉錄都無法開始。請先到 <Link to="/settings">設定</Link>{' '}
+                      指定一個本機資料夾。筆記不受影響，右邊照樣可以寫。
+                    </div>
+                  )}
 
+                  {busy ? (
+                    <div className="card">
+                      <h2>處理中</h2>
+                      <p className="small muted" style={{ margin: '.4rem 0 .9rem' }}>
+                        {progress?.stage ?? '準備中'}
+                        {progress && progress.total > 0
+                          ? `（${progress.done} / ${progress.total}）`
+                          : ''}
+                      </p>
+                      <div className="progress">
+                        <div
+                          style={{
+                            width:
+                              progress && progress.total > 0
+                                ? `${(progress.done / progress.total) * 100}%`
+                                : '15%',
+                          }}
+                        />
+                      </div>
+                      <p className="small muted" style={{ marginTop: '.9rem' }}>
+                        第一次使用會下載約 32 MB 的音訊處理引擎。之後就不用再下載了。
+                        請保持這個分頁開著。
+                      </p>
+                      <button
+                        className="btn danger sm"
+                        style={{ marginTop: '.6rem' }}
+                        onClick={() => abortRef.current?.abort()}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="intake">
+                      <RecorderPanel
+                        sessionId={sessionId}
+                        disabled={storageReady === false}
+                        onFinished={(file) => void handleFile(file)}
+                      />
+
+                      <label
+                        className={`dropzone${dragOver ? ' over' : ''}${
+                          storageReady === false ? ' is-disabled' : ''
+                        }`}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          if (storageReady !== false) setDragOver(true)
+                        }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          setDragOver(false)
+                          // The click path is disabled by the input; a drop has to
+                          // be refused here, or the file is encoded in full before
+                          // failing at the write.
+                          if (storageReady === false) return
+                          const file = e.dataTransfer.files[0]
+                          if (file) void handleFile(file)
+                        }}
+                      >
+                        <input
+                          type="file"
+                          accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
+                          style={{ display: 'none' }}
+                          disabled={storageReady === false}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) void handleFile(file)
+                            e.target.value = ''
+                          }}
+                        />
+                        <strong>
+                          {storageReady === false ? '設定儲存位置後才能上傳' : '或上傳已經錄好的檔案'}
+                        </strong>
+                        <div style={{ marginTop: '.4rem' }}>
+                          拖進來，或點一下選檔案。支援 mp3 / m4a / wav / ogg / webm / mp4。
+                        </div>
+                      </label>
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="notice err" style={{ marginTop: '1rem' }}>
+                      <strong>失敗</strong>
+                      <pre>{error}</pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {hasTranscript && (
               <div className="player">
                 {audioMissing ? (
                   <span className="small" style={{ color: 'var(--danger)' }}>
@@ -484,30 +555,32 @@ export function SessionPage() {
                   </>
                 )}
               </div>
-            </section>
+            )}
+          </section>
 
-            <section className="pane">
-              <div className="pane-head">
-                <span className="grow">我的筆記</span>
+          <section className="pane">
+            <div className="pane-head">
+              <span className="grow">我的筆記</span>
+              {hasTranscript && (
                 <button className="btn ghost sm" onClick={stampNow} title="插入目前播放時間（Alt+T）">
                   插入時間戳 ⌥T
                 </button>
-              </div>
-              <div className="pane-body">
-                {note !== undefined && (
-                  <NoteEditor
-                    key={sessionId}
-                    ref={editorRef}
-                    initialValue={note?.markdown ?? ''}
-                    onChange={onNoteChange}
-                    onSeek={seek}
-                    onStampRequested={stampNow}
-                  />
-                )}
-              </div>
-            </section>
-          </div>
-        )}
+              )}
+            </div>
+            <div className="pane-body">
+              {note !== undefined && (
+                <NoteEditor
+                  key={sessionId}
+                  ref={editorRef}
+                  initialValue={note?.markdown ?? ''}
+                  onChange={onNoteChange}
+                  onSeek={seek}
+                  onStampRequested={stampNow}
+                />
+              )}
+            </div>
+          </section>
+        </div>
       </div>
     </>
   )

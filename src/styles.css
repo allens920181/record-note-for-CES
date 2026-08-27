@@ -190,7 +190,26 @@ a.list-item:hover { border-color: var(--accent); }
 .ws-sub { font-size: .78rem; color: var(--muted); }
 
 .panes { flex: 1; display: grid; grid-template-columns: 1fr; min-height: 0; }
-@media (min-width: 60rem) { .panes { grid-template-columns: 1fr 1fr; } }
+/* Below the split point only one pane fits. Stacking them halves an already
+   fixed height (the workspace is calc(100vh - 3.2rem)), leaving two windows too
+   short to read or write in — so show one at a time and let the tabs choose. */
+.pane-tabs { display: flex; border-bottom: 1px solid var(--line); background: var(--surface); }
+.ptab {
+  flex: 1 1 0; font: inherit; font-size: .82rem; cursor: pointer;
+  padding: .5rem .6rem; border: 0; border-bottom: 2px solid transparent;
+  background: none; color: var(--muted);
+}
+.ptab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+@media (min-width: 60rem) {
+  .panes { grid-template-columns: 1fr 1fr; }
+  .pane-tabs { display: none; }
+}
+@media (max-width: 59.99rem) {
+  .panes[data-show='note'] > .pane:first-child { display: none; }
+  .panes[data-show='left'] > .pane:last-child { display: none; }
+}
+.btn.ghost.active { background: var(--accent-wash); color: var(--accent-ink); }
+.dropzone.is-disabled { opacity: .55; cursor: not-allowed; border-style: solid; }
 .pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--line); }
 .pane:last-child { border-right: 0; }
 .pane-head {
