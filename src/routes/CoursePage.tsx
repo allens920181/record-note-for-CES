@@ -6,6 +6,7 @@ import {
   createSessionOn,
   db,
   deleteSessionCascade,
+  sessionsInOrder,
   updateCourse,
   generateSessionsFromTimetable,
   renumberSessions,
@@ -13,7 +14,7 @@ import {
   todayISO,
 } from '../db'
 import type { ClassSlot } from '../db'
-import { MEETING_KIND_LABEL, SESSION_KIND_LABEL } from '../db/schema'
+import { MEETING_KINDS, MEETING_KIND_LABEL, SESSION_KIND_LABEL } from '../db/schema'
 import type { MeetingKind } from '../db/schema'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { AttachmentList } from '../components/AttachmentList'
@@ -29,7 +30,6 @@ import { TimeField } from '../components/TimeField'
 
 type Tab = 'sessions' | 'setup' | 'work' | 'require'
 
-const MEETING_KINDS: MeetingKind[] = ['lecture', 'discussion']
 
 export function CoursePage() {
   const { courseId = '' } = useParams()
@@ -44,14 +44,10 @@ export function CoursePage() {
     async () => (course ? db.terms.get(course.termId) : undefined),
     [course?.termId],
   )
-  const sessions = useLiveQuery(async () => {
-    const list = await db.sessions.where('courseId').equals(courseId).toArray()
-    // Sort by date, not by week number: a week holds several meetings and
-    // sorting on the shared number leaves their order to chance.
-    return list.sort(
-      (a, b) => a.date.localeCompare(b.date) || (a.kind ?? '').localeCompare(b.kind ?? ''),
-    )
-  }, [courseId])
+  // Ordered by date rather than week number — a week holds several meetings and
+  // sorting on the shared number leaves their order to chance. Shared with the
+  // workspace's previous/next buttons so the two cannot disagree.
+  const sessions = useLiveQuery(() => sessionsInOrder(courseId), [courseId])
   const workBlocks = useLiveQuery(
     () => db.workBlocks.where('courseId').equals(courseId).toArray(),
     [courseId],

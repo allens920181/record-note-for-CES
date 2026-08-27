@@ -581,3 +581,6 @@ input[type='time'] {
   border-radius: 6px; padding: .45rem .6rem; width: 100%;
 }
 input[type='time']:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+/* A link with nowhere to go: dimmed and inert, but still occupying its place so
+   the toolbar does not shift as you move through a course. */
+.btn.is-off { opacity: .45; pointer-events: none; }

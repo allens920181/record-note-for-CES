@@ -14,6 +14,9 @@ export const MEETING_KIND_LABEL: Record<MeetingKind, string> = {
   discussion: '分組討論',
 }
 
+/** Declared order — a week's lecture is listed before the discussion that follows it. */
+export const MEETING_KINDS: MeetingKind[] = ['lecture', 'discussion']
+
 export interface ClassSlot {
   weekday: number // 0 = Sunday
   start: string // "19:00"

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, deleteTranscription, recordCorrection, saveNote } from '../db'
+import { db, deleteTranscription, recordCorrection, saveNote, siblingSessions } from '../db'
 import type { SessionKind, TranscriptSegment } from '../db/schema'
 import { SESSION_KIND_LABEL } from '../db/schema'
 import { readFile, rootStatus } from '../storage/fsRoot'
@@ -55,6 +55,7 @@ export function SessionPage() {
   // written to has no row — which used to mean the editor never mounted, and
   // therefore no row could ever be written. A deadlock hidden by every test
   // seeding a note first.
+  const siblings = useLiveQuery(() => siblingSessions(sessionId), [sessionId])
   const note = useLiveQuery(async () => (await db.notes.get(sessionId)) ?? null, [sessionId])
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -323,6 +324,32 @@ export function SessionPage() {
             { label: `第 ${session.index} 週 · ${kindLabel}` },
           ]}
         />
+        {/* Sideways, not just up: tidying a course's notes means going through
+            fifteen weeks, and every step used to be two clicks via the course
+            page. The labels name the destination so a step is never a guess. */}
+        <span className="spacer" />
+        <Link
+          className={`btn ghost sm step${siblings?.prev ? '' : ' is-off'}`}
+          to={siblings?.prev ? `/session/${siblings.prev.id}` : '#'}
+          aria-disabled={!siblings?.prev}
+          onClick={(e) => !siblings?.prev && e.preventDefault()}
+        >
+          ‹{' '}
+          {siblings?.prev
+            ? `第 ${siblings.prev.index} 週 · ${SESSION_KIND_LABEL[siblings.prev.kind ?? 'lecture']}`
+            : '這是第一個'}
+        </Link>
+        <Link
+          className={`btn ghost sm step${siblings?.next ? '' : ' is-off'}`}
+          to={siblings?.next ? `/session/${siblings.next.id}` : '#'}
+          aria-disabled={!siblings?.next}
+          onClick={(e) => !siblings?.next && e.preventDefault()}
+        >
+          {siblings?.next
+            ? `第 ${siblings.next.index} 週 · ${SESSION_KIND_LABEL[siblings.next.kind ?? 'lecture']}`
+            : '這是最後一個'}{' '}
+          ›
+        </Link>
       </TopBar>
 
       <div className="workspace">

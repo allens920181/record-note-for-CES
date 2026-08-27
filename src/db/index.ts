@@ -2,7 +2,7 @@ import Dexie from 'dexie'
 import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
 import { deleteDir, deleteFile } from '../storage/fsRoot'
-import { DEFAULT_SETTINGS, FREE_TIER } from './schema'
+import { DEFAULT_SETTINGS, FREE_TIER, MEETING_KINDS } from './schema'
 import { hoursBetween } from '../lib/time'
 import { addDays, todayISO } from '../lib/dates'
 import { correctionKey, diffOnce, isMeaningful, suggestFrom } from '../schedule/corrections'
@@ -782,6 +782,36 @@ export async function courseProgress(courseId: string): Promise<CourseProgress> 
     itemsTotal: planned.reduce((sum, w) => sum + w.total, 0),
     hoursLeft: planned.reduce((sum, w) => sum + w.hoursLeft, 0),
   }
+}
+
+/**
+ * A course's meetings in the order people read them: by date, then lecture
+ * before discussion within a day.
+ *
+ * Shared so the ordering is written once. The course list and the workspace's
+ * previous/next buttons have to agree — "下一週" landing somewhere other than
+ * the row below it would be its own small betrayal.
+ */
+export async function sessionsInOrder(courseId: string): Promise<Session[]> {
+  const list = await db.sessions.where('courseId').equals(courseId).toArray()
+  // Kind order comes from MEETING_KINDS, not from the string: sorting the
+  // labels alphabetically puts 'discussion' before 'lecture', so a week's
+  // discussion would be listed above the class it follows.
+  const rank = (k?: MeetingKind) => MEETING_KINDS.indexOf(k ?? 'lecture')
+  return list.sort(
+    (a, b) => a.date.localeCompare(b.date) || rank(a.kind) - rank(b.kind),
+  )
+}
+
+/** The meetings either side of one, for stepping through a course. */
+export async function siblingSessions(
+  sessionId: string,
+): Promise<{ prev: Session | null; next: Session | null }> {
+  const session = await db.sessions.get(sessionId)
+  if (!session) return { prev: null, next: null }
+  const all = await sessionsInOrder(session.courseId)
+  const i = all.findIndex((s) => s.id === sessionId)
+  return { prev: i > 0 ? all[i - 1] : null, next: i >= 0 && i < all.length - 1 ? all[i + 1] : null }
 }
 
 // ── transcripts and recordings ────────────────────────────────────────
