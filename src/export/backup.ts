@@ -23,6 +23,7 @@ const TABLES = [
   'workBlocks',
   'assignments',
   'readings',
+  'weekPlans',
   'corrections',
 ] as const
 

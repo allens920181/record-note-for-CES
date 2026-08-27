@@ -486,3 +486,36 @@ table.gloss .tag + .tag { margin-left: .3rem; }
 select.add-to { flex: 0 0 auto; width: 7rem; font-size: .78rem; padding: .28rem .5rem; }
 .btn.danger-text { color: var(--danger); }
 .btn.danger-text:hover:not(:disabled) { background: var(--danger-wash); color: var(--danger); }
+
+/* ── course requirements ─────────────────────────────────────────── */
+.grade-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.grade-head h3 { margin: 0; font-size: .92rem; }
+.grade-row {
+  display: grid; gap: .4rem; align-items: center;
+  grid-template-columns: minmax(0, 1fr) 5rem minmax(0, 1fr) auto;
+}
+@media (max-width: 44rem) { .grade-row { grid-template-columns: minmax(0, 1fr) 5rem; } }
+/* A number and its unit read as one field, so they sit in one box. */
+.pct { display: flex; align-items: center; gap: .25rem; }
+.pct input { text-align: right; }
+
+/* ── weekly plan ─────────────────────────────────────────────────── */
+.plan-item {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .3rem .45rem; border-radius: 6px; border: 1px solid transparent;
+}
+.plan-item:hover { background: var(--surface-2); }
+.plan-item input[type='checkbox'] { flex: none; width: 1rem; height: 1rem; accent-color: var(--accent); }
+.plan-item .plan-title { flex: 1 1 8rem; border-color: transparent; background: transparent; }
+.plan-item .plan-title:focus { border-color: var(--accent); background: var(--surface); }
+.plan-item .pct { flex: 0 0 4.5rem; }
+.plan-item.is-done .plan-title { color: var(--muted); text-decoration: line-through; }
+.ws-plan { padding: 0 1.25rem 1rem; }
+
+/* ── weekly progress on the session list ─────────────────────────── */
+/* The left edge carries the state so the row stays plain text otherwise; the
+   week list is scanned far more often than it is read. */
+.list-item.wk-done { border-left: 3px solid var(--accent); }
+.list-item.wk-doing { border-left: 3px solid var(--warn); }
+.list-item.wk-unplanned-past { border-left: 3px solid var(--danger); }
+.list-item.wk-off { opacity: .6; }

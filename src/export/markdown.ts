@@ -57,6 +57,12 @@ export async function exportTermMarkdown(
         : `- ${b.date} ${b.start}–${b.end}${b.note ? ` · ${b.note}` : ''}`,
     )
 
+    const req = course.requirements
+    const gradeLines = (req?.grading ?? []).map(
+      (g) => `- ${g.label || '（未命名）'}：${g.weight}%${g.note ? ` · ${g.note}` : ''}`,
+    )
+    const totalWeight = (req?.grading ?? []).reduce((sum, g) => sum + (Number(g.weight) || 0), 0)
+
     await writeInto(
       root,
       `${courseDir}/_課程.md`,
@@ -70,6 +76,10 @@ export async function exportTermMarkdown(
         `\n# ${course.name}\n\n` +
         (slotLines.length ? `## 上課時段\n\n${slotLines.join('\n')}\n\n` : '') +
         (workLines.length ? `## 作業時間\n\n${workLines.join('\n')}\n\n` : '') +
+        (gradeLines.length
+          ? `## 評分方式\n\n${gradeLines.join('\n')}\n\n（共 ${totalWeight}%）\n\n`
+          : '') +
+        (req?.rules.trim() ? `## 課堂要求\n\n${req.rules.trim()}\n\n` : '') +
         (course.glossary.length
           ? `## 專有名詞\n\n${course.glossary.map((g) => `- ${g}`).join('\n')}\n`
           : ''),
@@ -100,6 +110,13 @@ export async function exportTermMarkdown(
     // ── readings ─────────────────────────────────────────────────────
     const readings = await db.readings.where('courseId').equals(course.id).sortBy('createdAt')
     if (readings.length > 0) {
+      // Not `files` — that name is already the running count of written files.
+      const ecopies = new Map(
+        (await db.attachments.where('courseId').equals(course.id).toArray()).map((a) => [
+          a.id,
+          a.fileName,
+        ]),
+      )
       const body = readings
         .map(
           (r) =>
@@ -109,6 +126,9 @@ export async function exportTermMarkdown(
             `- 狀態：${READING_STATUS_LABEL[r.status]}` +
             (r.totalPages ? `（${r.pagesRead ?? 0}/${r.totalPages} 頁）` : '') +
             '\n' +
+            (r.attachmentId && ecopies.has(r.attachmentId)
+              ? `- 電子檔：${ecopies.get(r.attachmentId)}\n`
+              : '') +
             (r.notes ? `\n${r.notes}\n` : ''),
         )
         .join('\n')
@@ -122,10 +142,14 @@ export async function exportTermMarkdown(
     )
     for (const session of sessions) {
       const kind = SESSION_KIND_LABEL[session.kind ?? 'lecture']
-      const [transcript, note] = await Promise.all([
+      const [transcript, note, plan] = await Promise.all([
         db.transcripts.where('sessionId').equals(session.id).last(),
         db.notes.get(session.id),
+        db.weekPlans.get(session.id),
       ])
+      const planLines = (plan?.items ?? []).map(
+        (i) => `- [${i.done ? 'x' : ' '}] ${i.title}${i.hours ? ` （${i.hours}h）` : ''}`,
+      )
 
       const name = `第${String(session.index).padStart(2, '0')}週 ${session.date} ${kind}`
       const body =
@@ -139,6 +163,7 @@ export async function exportTermMarkdown(
           topic: session.topic,
         }) +
         `\n# ${name}${session.topic ? ` · ${session.topic}` : ''}\n\n` +
+        (planLines.length ? `## 本週進度\n\n${planLines.join('\n')}\n\n` : '') +
         (note?.markdown.trim() ? `## 我的筆記\n\n${note.markdown.trim()}\n\n` : '') +
         (transcript
           ? `## 逐字稿\n\n${transcript.segments

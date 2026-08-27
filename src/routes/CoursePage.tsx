@@ -19,9 +19,11 @@ import { AttachmentList } from '../components/AttachmentList'
 import { WorkBlockEditor } from '../components/WorkBlockEditor'
 import { ReadingList } from '../components/ReadingList'
 import { CorrectionsPanel } from '../components/CorrectionsPanel'
+import { RequirementsPanel } from '../components/RequirementsPanel'
+import { ProgressOverview } from '../components/ProgressOverview'
 import { Modal } from '../components/Modal'
 
-type Tab = 'sessions' | 'setup' | 'work'
+type Tab = 'sessions' | 'setup' | 'work' | 'require'
 
 const MEETING_KINDS: MeetingKind[] = ['lecture', 'discussion']
 
@@ -50,12 +52,20 @@ export function CoursePage() {
     [courseId],
   )
   const state = useLiveQuery(async () => {
-    const [transcripts, notes] = await Promise.all([db.transcripts.toArray(), db.notes.toArray()])
+    const ids = (await db.sessions.where('courseId').equals(courseId).primaryKeys()) as string[]
+    const [scribed, notes, plans] = await Promise.all([
+      // Keys, not records: a transcript holds every segment of a three-hour
+      // lecture, and this only needs to know whether one exists.
+      db.transcripts.where('sessionId').anyOf(ids).keys(),
+      db.notes.where('sessionId').anyOf(ids).toArray(),
+      db.weekPlans.where('courseId').equals(courseId).toArray(),
+    ])
     return {
-      transcribed: new Set(transcripts.map((t) => t.sessionId)),
+      transcribed: new Set(scribed as string[]),
       noted: new Set(notes.filter((n) => n.markdown.trim()).map((n) => n.sessionId)),
+      plans: new Map(plans.map((p) => [p.sessionId, p.items])),
     }
-  }, [])
+  }, [courseId])
 
   if (course === undefined) return <div className="page">載入中…</div>
   if (course === null)
@@ -67,6 +77,7 @@ export function CoursePage() {
 
   const slots = course.slots
   const hours = sumWorkHours(workBlocks ?? [], term?.weeks ?? 0)
+  const today = todayISO()
 
   async function patchSlots(next: ClassSlot[]) {
     await db.courses.update(courseId, { slots: next })
@@ -142,6 +153,12 @@ export function CoursePage() {
           <button className={`tab${tab === 'work' ? ' active' : ''}`} onClick={() => setTab('work')}>
             作業 · 閱讀
           </button>
+          <button
+            className={`tab${tab === 'require' ? ' active' : ''}`}
+            onClick={() => setTab('require')}
+          >
+            課堂要求
+          </button>
         </div>
 
         {message && (
@@ -152,6 +169,8 @@ export function CoursePage() {
 
         {tab === 'sessions' && (
           <>
+            <ProgressOverview courseId={courseId} />
+
             <div className="row" style={{ gap: '.6rem', marginBottom: '1rem' }}>
               {MEETING_KINDS.map((k) => (
                 <button
@@ -188,8 +207,23 @@ export function CoursePage() {
               </div>
             ) : (
               <div className="stack">
-                {sessions.map((s) => (
-                  <div key={s.id} className="list-item">
+                {sessions.map((s) => {
+                  const items = state?.plans.get(s.id) ?? []
+                  const planDone = items.filter((i) => i.done).length
+                  const planLeft = items
+                    .filter((i) => !i.done)
+                    .reduce((sum, i) => sum + (Number(i.hours) || 0), 0)
+                  const planState = s.canceled
+                    ? 'off'
+                    : items.length === 0
+                      ? s.date < today
+                        ? 'unplanned-past'
+                        : 'unplanned'
+                      : planDone === items.length
+                        ? 'done'
+                        : 'doing'
+                  return (
+                  <div key={s.id} className={`list-item wk-${planState}`}>
                     <Link
                       to={`/session/${s.id}`}
                       className="grow"
@@ -211,6 +245,16 @@ export function CoursePage() {
                       <span className="tag">未轉錄</span>
                     )}
                     {state?.noted.has(s.id) && <span className="tag ok">有筆記</span>}
+                    {!s.canceled && (
+                      <span
+                        className={`tag${planState === 'done' ? ' ok' : planState === 'unplanned-past' ? ' warn' : ''}`}
+                        title="本週進度"
+                      >
+                        {items.length === 0
+                          ? '未排進度'
+                          : `進度 ${planDone}/${items.length}${planLeft > 0 ? ` · ${planLeft}h` : ''}`}
+                      </span>
+                    )}
                     <button
                       className="btn ghost sm"
                       onClick={() => db.sessions.update(s.id, { canceled: !s.canceled })}
@@ -233,7 +277,8 @@ export function CoursePage() {
                       刪除
                     </button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </>
@@ -420,6 +465,8 @@ export function CoursePage() {
             />
           </>
         )}
+        {tab === 'require' && <RequirementsPanel courseId={courseId} />}
+
         {tab === 'work' && (
           <>
             <section className="card" style={{ marginBottom: '1.25rem' }}>

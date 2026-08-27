@@ -14,7 +14,10 @@ import type {
   ClassSlot,
   Correction,
   Course,
+  CourseRequirements,
+  GradeItem,
   MeetingKind,
+  PlanItem,
   Note,
   Reading,
   Recording,
@@ -27,6 +30,7 @@ import type {
   TranscribeJob,
   Transcript,
   UsageEntry,
+  WeekPlan,
   WorkBlock,
 } from './schema'
 
@@ -38,7 +42,10 @@ export type {
   ClassSlot,
   Correction,
   Course,
+  CourseRequirements,
+  GradeItem,
   MeetingKind,
+  PlanItem,
   Note,
   Reading,
   Recording,
@@ -51,6 +58,7 @@ export type {
   TranscribeJob,
   Transcript,
   UsageEntry,
+  WeekPlan,
   WorkBlock,
 }
 
@@ -70,6 +78,7 @@ class NotesDB extends Dexie {
   readings!: EntityTable<Reading, 'id'>
   corrections!: EntityTable<Correction, 'id'>
   usage!: EntityTable<UsageEntry, 'id'>
+  weekPlans!: EntityTable<WeekPlan, 'id'>
 
   constructor() {
     super('record-note-for-ces')
@@ -101,6 +110,11 @@ class NotesDB extends Dexie {
       corrections: 'id, courseId, sessionId, key, createdAt',
       usage: 'id, at',
     })
+    // v6 adds the weekly study plan. Course requirements ride inside the course
+    // record, so they need no store of their own — an absent `requirements`
+    // reads as "not filled in yet", which is the right default for a course
+    // created before the field existed.
+    this.version(6).stores({ weekPlans: 'id, sessionId, courseId' })
   }
 }
 
@@ -162,6 +176,7 @@ export async function deleteCourseCascade(courseId: string): Promise<void> {
   await db.assignments.where('courseId').equals(courseId).delete()
   await db.corrections.where('courseId').equals(courseId).delete()
   await db.readings.where('courseId').equals(courseId).delete()
+  await db.weekPlans.where('courseId').equals(courseId).delete()
   const courseFiles = await db.attachments.where('courseId').equals(courseId).toArray()
   await Promise.all(courseFiles.map((a) => deleteFile(a.storageKey)))
   await db.attachments.where('courseId').equals(courseId).delete()
@@ -623,7 +638,135 @@ export async function deleteSessionCascade(sessionId: string): Promise<void> {
   await db.recordings.where('sessionId').equals(sessionId).delete()
   await db.jobs.where('sessionId').equals(sessionId).delete()
   await db.notes.where('sessionId').equals(sessionId).delete()
+  await db.weekPlans.where('sessionId').equals(sessionId).delete()
   await db.sessions.delete(sessionId)
+}
+
+// ── course requirements ───────────────────────────────────────────────
+
+export async function saveRequirements(
+  courseId: string,
+  requirements: CourseRequirements,
+): Promise<void> {
+  await db.courses.update(courseId, { requirements })
+}
+
+export interface RequirementsReview {
+  requirements: CourseRequirements
+  /** Sum of the weights; 100 is what a syllabus normally adds up to. */
+  totalWeight: number
+  /** Graded items with no assignment behind them — unplanned work. */
+  unplanned: GradeItem[]
+}
+
+/**
+ * The grading table plus the two things worth being told about it: whether the
+ * weights add up, and which graded items have no assignment yet.
+ */
+export async function reviewRequirements(courseId: string): Promise<RequirementsReview> {
+  const course = await db.courses.get(courseId)
+  const requirements = course?.requirements ?? { grading: [], rules: '' }
+  const assignments = await db.assignments.where('courseId').equals(courseId).toArray()
+  const known = new Set(assignments.map((a) => a.id))
+  return {
+    requirements,
+    totalWeight: requirements.grading.reduce((sum, g) => sum + (Number(g.weight) || 0), 0),
+    unplanned: requirements.grading.filter(
+      (g) => !g.assignmentId || !known.has(g.assignmentId),
+    ),
+  }
+}
+
+// ── weekly study plan ─────────────────────────────────────────────────
+
+export async function getWeekPlan(sessionId: string): Promise<WeekPlan | undefined> {
+  return db.weekPlans.get(sessionId)
+}
+
+export async function saveWeekPlan(
+  sessionId: string,
+  courseId: string,
+  items: PlanItem[],
+): Promise<void> {
+  await db.weekPlans.put({ id: sessionId, sessionId, courseId, items, updatedAt: Date.now() })
+}
+
+export interface WeekProgress {
+  sessionId: string
+  index: number
+  date: string
+  kind: SessionKind
+  topic: string
+  canceled: boolean
+  done: number
+  total: number
+  /** Hours the plan's unfinished items still need. */
+  hoursLeft: number
+  hasNote: boolean
+  hasTranscript: boolean
+}
+
+export interface CourseProgress {
+  weeks: WeekProgress[]
+  plannedWeeks: number
+  completedWeeks: number
+  itemsDone: number
+  itemsTotal: number
+  hoursLeft: number
+}
+
+/**
+ * Progress across a whole course, week by week. Deliberately counts only weeks
+ * that have a plan: a term with fifteen weeks and four planned is 4/4 done, not
+ * 4/15 — the eleven with no plan are not behind, they simply have not been
+ * thought about yet, and mixing the two makes the number meaningless.
+ */
+export async function courseProgress(courseId: string): Promise<CourseProgress> {
+  const [sessions, plans] = await Promise.all([
+    db.sessions.where('courseId').equals(courseId).toArray(),
+    db.weekPlans.where('courseId').equals(courseId).toArray(),
+  ])
+  const ids = sessions.map((s) => s.id)
+  const [notes, scribedKeys] = await Promise.all([
+    db.notes.where('sessionId').anyOf(ids).toArray(),
+    // Keys, not records: a transcript carries every segment of a three-hour
+    // lecture, and all this needs to know is whether one exists.
+    db.transcripts.where('sessionId').anyOf(ids).keys(),
+  ])
+  const planBy = new Map(plans.map((p) => [p.sessionId, p]))
+  const noted = new Set(notes.filter((n) => n.markdown.trim().length > 0).map((n) => n.sessionId))
+  const scribed = new Set(scribedKeys as string[])
+
+  const weeks: WeekProgress[] = sessions
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((s) => {
+      const items = planBy.get(s.id)?.items ?? []
+      return {
+        sessionId: s.id,
+        index: s.index,
+        date: s.date,
+        kind: s.kind ?? 'lecture',
+        topic: s.topic,
+        canceled: s.canceled,
+        done: items.filter((i) => i.done).length,
+        total: items.length,
+        hoursLeft: items
+          .filter((i) => !i.done)
+          .reduce((sum, i) => sum + (Number(i.hours) || 0), 0),
+        hasNote: noted.has(s.id),
+        hasTranscript: scribed.has(s.id),
+      }
+    })
+
+  const planned = weeks.filter((w) => w.total > 0)
+  return {
+    weeks,
+    plannedWeeks: planned.length,
+    completedWeeks: planned.filter((w) => w.done === w.total).length,
+    itemsDone: planned.reduce((sum, w) => sum + w.done, 0),
+    itemsTotal: planned.reduce((sum, w) => sum + w.total, 0),
+    hoursLeft: planned.reduce((sum, w) => sum + w.hoursLeft, 0),
+  }
 }
 
 // ── notes ─────────────────────────────────────────────────────────────

@@ -57,6 +57,36 @@ export interface Term {
   createdAt: number
 }
 
+/**
+ * One line of the syllabus's grading table. `assignmentId` is what makes this
+ * worth structuring rather than pasting as prose: a graded item with no
+ * assignment behind it is work that has not been planned yet, and that is
+ * exactly what gets missed in week twelve.
+ */
+export interface GradeItem {
+  id: string
+  label: string
+  /** Percent of the final grade. */
+  weight: number
+  /** The assignment covering this item, once one exists. */
+  assignmentId?: string
+  note?: string
+}
+
+/**
+ * What the course asks of you, taken off the syllabus by hand. The syllabus PDF
+ * is still uploaded and readable, but "報告幾頁、引註用什麼格式、遲交扣幾分" is
+ * looked up mid-task, and opening a PDF to find it every time is the friction
+ * this removes.
+ */
+export interface CourseRequirements {
+  grading: GradeItem[]
+  /** Free text: attendance, late work, formatting, anything else. */
+  rules: string
+}
+
+export const EMPTY_REQUIREMENTS: CourseRequirements = { grading: [], rules: '' }
+
 export interface Course {
   id: string
   termId: string
@@ -68,6 +98,8 @@ export interface Course {
   slots: ClassSlot[]
   /** Terms fed to the transcription model so it spells them right. */
   glossary: string[]
+  /** Absent on courses created before requirements existed. */
+  requirements?: CourseRequirements
   createdAt: number
 }
 
@@ -245,6 +277,40 @@ export interface Reading {
   notes: string
   createdAt: number
 }
+
+/**
+ * What you mean to do for one course in one week, and how far you got.
+ *
+ * Distinct from an assignment's subtasks, which are steps toward one deliverable
+ * with one deadline. This is the week itself: read the chapters before class,
+ * tidy the notes after it, keep chipping at the paper due next month. Those are
+ * the things that quietly slip, because nothing is due on Thursday.
+ */
+export interface PlanItem {
+  id: string
+  title: string
+  done: boolean
+  /** Rough hours, so a week can be weighed against the study time set aside. */
+  hours?: number
+  /** Set when the item came from the reading list, so progress can flow back. */
+  readingId?: string
+}
+
+export interface WeekPlan {
+  /** One plan per session, so the plan id is the session id. */
+  id: string
+  sessionId: string
+  courseId: string
+  items: PlanItem[]
+  updatedAt: number
+}
+
+/** Offered when a week's plan is still empty. */
+export const PLAN_TEMPLATES: Array<{ name: string; steps: string[] }> = [
+  { name: '一般週', steps: ['讀完指定閱讀', '課後整理筆記', '複習上週逐字稿'] },
+  { name: '報告週', steps: ['讀完指定閱讀', '寫作業：這一段', '課後整理筆記'] },
+  { name: '考前週', steps: ['複習逐字稿', '整理重點', '背誦原文詞彙'] },
+]
 
 /** One fix the reader made to a transcript line, kept so it can teach the glossary. */
 export interface Correction {

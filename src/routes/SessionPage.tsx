@@ -10,6 +10,7 @@ import type { RunProgress } from '../stt/transcribe'
 import { formatBytes, formatDuration, formatQuota, formatTime } from '../lib/time'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { NoteEditor } from '../components/NoteEditor'
+import { WeekPlanPanel } from '../components/WeekPlanPanel'
 import type { NoteEditorHandle } from '../components/NoteEditor'
 import { RecorderPanel } from '../components/RecorderPanel'
 import { AttachmentList } from '../components/AttachmentList'
@@ -60,6 +61,9 @@ export function SessionPage() {
   const [follow, setFollow] = useState(true)
   const [editingTranscript, setEditingTranscript] = useState(false)
   const [glossaryNote, setGlossaryNote] = useState<string | null>(null)
+  // null means "follow the default": open while there is nothing to transcribe,
+  // closed once the two panes need the height.
+  const [planOpen, setPlanOpen] = useState<boolean | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<RunProgress | null>(null)
@@ -191,6 +195,10 @@ export function SessionPage() {
     [sessionId],
   )
 
+  const plan = useLiveQuery(() => db.weekPlans.get(sessionId), [sessionId])
+  const planDone = plan?.items.filter((i) => i.done).length ?? 0
+  const planTotal = plan?.items.length ?? 0
+
   async function updateSegment(index: number, text: string) {
     if (!transcript || !course) return
     const before = transcript.segments[index]?.text ?? ''
@@ -251,6 +259,7 @@ export function SessionPage() {
     )
 
   const hasTranscript = segments.length > 0
+  const showPlan = planOpen ?? !hasTranscript
   const kindLabel = SESSION_KIND_LABEL[(session.kind ?? 'lecture') as SessionKind]
 
   return (
@@ -286,7 +295,21 @@ export function SessionPage() {
               {formatDuration(recording.durationSec)} · {formatBytes(recording.bytes)}
             </span>
           )}
+          <button
+            className="btn ghost sm"
+            style={{ flex: '0 0 auto' }}
+            aria-expanded={showPlan}
+            onClick={() => setPlanOpen(!showPlan)}
+          >
+            本週進度{planTotal > 0 ? ` ${planDone}/${planTotal}` : ''}
+          </button>
         </div>
+
+        {showPlan && (
+          <div className="ws-plan">
+            <WeekPlanPanel sessionId={sessionId} courseId={session.courseId} compact />
+          </div>
+        )}
 
         {/* ── before there's a transcript: record or upload ───────── */}
         {!hasTranscript && (
