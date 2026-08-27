@@ -134,8 +134,10 @@ label { display: block; font-size: .8rem; font-weight: 500; color: var(--ink-sof
   text-decoration: none; color: inherit; transition: border-color .12s, transform .12s;
 }
 a.list-item:hover { border-color: var(--accent); }
-.list-item .title { font-weight: 500; color: var(--ink); }
-.list-item .sub { font-size: .8rem; color: var(--muted); }
+/* Block, not inline: in the file list these sit inside a <button>, where two
+   inline spans run the name and its size together into one word. */
+.list-item .title { display: block; font-weight: 500; color: var(--ink); }
+.list-item .sub { display: block; font-size: .8rem; color: var(--muted); }
 .swatch { width: .55rem; align-self: stretch; border-radius: 3px; flex: none; min-height: 2.2rem; }
 .grow { flex: 1; min-width: 0; }
 

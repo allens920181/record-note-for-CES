@@ -148,7 +148,7 @@ export function CoursePage() {
             週次 {sessions ? `(${sessions.length})` : ''}
           </button>
           <button className={`tab${tab === 'setup' ? ' active' : ''}`} onClick={() => setTab('setup')}>
-            課表 · 作業時間 · 詞彙表 · 檔案
+            課表 · 作業時間 · 詞彙表
           </button>
           <button className={`tab${tab === 'work' ? ' active' : ''}`} onClick={() => setTab('work')}>
             作業 · 閱讀
@@ -157,7 +157,7 @@ export function CoursePage() {
             className={`tab${tab === 'require' ? ' active' : ''}`}
             onClick={() => setTab('require')}
           >
-            課堂要求
+            課堂要求 · 書目
           </button>
         </div>
 
@@ -455,17 +455,21 @@ export function CoursePage() {
 
             <CorrectionsPanel courseId={courseId} />
 
+          </>
+        )}
+        {tab === 'require' && (
+          <>
+            <RequirementsPanel courseId={courseId} />
             <AttachmentList
               scope="course"
               ownerId={courseId}
               courseId={courseId}
               kinds={['syllabus', 'reading', 'other']}
-              title="課程檔案"
-              hint="教學大綱與整學期共用的閱讀材料。PDF 會抽出文字，之後的跨週搜尋會用到。"
+              title="書目與課程檔案"
+              hint="教學大綱、指定書目、整學期共用的閱讀材料。PDF 會抽出文字，跨週搜尋找得到；閱讀清單裡的每一本書也可以指到這裡的檔案。"
             />
           </>
         )}
-        {tab === 'require' && <RequirementsPanel courseId={courseId} />}
 
         {tab === 'work' && (
           <>

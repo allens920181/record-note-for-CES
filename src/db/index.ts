@@ -15,7 +15,6 @@ import type {
   Correction,
   Course,
   CourseRequirements,
-  GradeItem,
   MeetingKind,
   PlanItem,
   Note,
@@ -43,7 +42,6 @@ export type {
   Correction,
   Course,
   CourseRequirements,
-  GradeItem,
   MeetingKind,
   PlanItem,
   Note,
@@ -651,31 +649,6 @@ export async function saveRequirements(
   await db.courses.update(courseId, { requirements })
 }
 
-export interface RequirementsReview {
-  requirements: CourseRequirements
-  /** Sum of the weights; 100 is what a syllabus normally adds up to. */
-  totalWeight: number
-  /** Graded items with no assignment behind them — unplanned work. */
-  unplanned: GradeItem[]
-}
-
-/**
- * The grading table plus the two things worth being told about it: whether the
- * weights add up, and which graded items have no assignment yet.
- */
-export async function reviewRequirements(courseId: string): Promise<RequirementsReview> {
-  const course = await db.courses.get(courseId)
-  const requirements = course?.requirements ?? { grading: [], rules: '' }
-  const assignments = await db.assignments.where('courseId').equals(courseId).toArray()
-  const known = new Set(assignments.map((a) => a.id))
-  return {
-    requirements,
-    totalWeight: requirements.grading.reduce((sum, g) => sum + (Number(g.weight) || 0), 0),
-    unplanned: requirements.grading.filter(
-      (g) => !g.assignmentId || !known.has(g.assignmentId),
-    ),
-  }
-}
 
 // ── weekly study plan ─────────────────────────────────────────────────
 

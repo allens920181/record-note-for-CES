@@ -58,17 +58,13 @@ export interface Term {
 }
 
 /**
- * One line of the syllabus's grading table. `assignmentId` is what makes this
- * worth structuring rather than pasting as prose: a graded item with no
- * assignment behind it is work that has not been planned yet, and that is
- * exactly what gets missed in week twelve.
+ * A line of a grading table, from a version that had one. Kept only so the data
+ * can be folded into `rules` on first sight; nothing writes it any more.
  */
 export interface GradeItem {
   id: string
   label: string
-  /** Percent of the final grade. */
   weight: number
-  /** The assignment covering this item, once one exists. */
   assignmentId?: string
   note?: string
 }
@@ -78,10 +74,13 @@ export interface GradeItem {
  * is still uploaded and readable, but "報告幾頁、引註用什麼格式、遲交扣幾分" is
  * looked up mid-task, and opening a PDF to find it every time is the friction
  * this removes.
+ *
+ * One block of text, not a schema: what gets looked up is a sentence, and
+ * fields you have to fill in are fields someone then has to read back.
  */
 export interface CourseRequirements {
+  /** @deprecated folded into `rules`; see RequirementsPanel. */
   grading: GradeItem[]
-  /** Free text: attendance, late work, formatting, anything else. */
   rules: string
 }
 

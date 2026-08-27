@@ -58,10 +58,6 @@ export async function exportTermMarkdown(
     )
 
     const req = course.requirements
-    const gradeLines = (req?.grading ?? []).map(
-      (g) => `- ${g.label || '（未命名）'}：${g.weight}%${g.note ? ` · ${g.note}` : ''}`,
-    )
-    const totalWeight = (req?.grading ?? []).reduce((sum, g) => sum + (Number(g.weight) || 0), 0)
 
     await writeInto(
       root,
@@ -76,9 +72,6 @@ export async function exportTermMarkdown(
         `\n# ${course.name}\n\n` +
         (slotLines.length ? `## 上課時段\n\n${slotLines.join('\n')}\n\n` : '') +
         (workLines.length ? `## 作業時間\n\n${workLines.join('\n')}\n\n` : '') +
-        (gradeLines.length
-          ? `## 評分方式\n\n${gradeLines.join('\n')}\n\n（共 ${totalWeight}%）\n\n`
-          : '') +
         (req?.rules.trim() ? `## 課堂要求\n\n${req.rules.trim()}\n\n` : '') +
         (course.glossary.length
           ? `## 專有名詞\n\n${course.glossary.map((g) => `- ${g}`).join('\n')}\n`
