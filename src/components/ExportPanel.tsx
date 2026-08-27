@@ -1,19 +1,17 @@
 import { useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../db'
 import { pickExportFolder } from '../storage/fsRoot'
 import { exportTermMarkdown } from '../export/markdown'
 import { backupBlob, backupFileName, buildBackup, downloadBlob, restoreBackup } from '../export/backup'
+import { TermPicker, useTermChoice } from './TermPicker'
 
 type Msg = { kind: 'ok' | 'err'; text: string } | null
 
 export function ExportPanel() {
-  const terms = useLiveQuery(() => db.terms.orderBy('createdAt').reverse().toArray(), [])
-  const [termId, setTermId] = useState('')
+  const { termId, setTermId, terms } = useTermChoice()
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<Msg>(null)
 
-  const activeTermId = termId || terms?.[0]?.id || ''
+  const activeTermId = termId ?? ''
 
   async function guard(label: string, run: () => Promise<string>) {
     setBusy(label)
@@ -39,16 +37,14 @@ export function ExportPanel() {
       </p>
 
       <div className="row" style={{ gap: '.6rem', alignItems: 'flex-end' }}>
-        <div className="field" style={{ flex: '0 0 14rem', marginBottom: 0 }}>
-          <label htmlFor="ex-term">要匯出的學期</label>
-          <select id="ex-term" value={activeTermId} onChange={(e) => setTermId(e.target.value)}>
-            {(terms ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <TermPicker
+          termId={activeTermId}
+          terms={terms}
+          onChange={setTermId}
+          id="ex-term"
+          label="要匯出的學期"
+          hideWhenSingle={false}
+        />
         <button
           className="btn primary"
           style={{ flex: '0 0 auto' }}

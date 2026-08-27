@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   createAssignment,
@@ -15,6 +15,7 @@ import { describeDays, workloadOf } from '../schedule/workload'
 import type { Pressure } from '../schedule/workload'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
+import { TermPicker, useTermChoice } from '../components/TermPicker'
 
 const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
   done: { cls: 'ok', label: '已完成' },
@@ -26,18 +27,29 @@ const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
 
 export function AssignmentsPage() {
   const { hash } = useLocation()
+  const [urlParams] = useSearchParams()
   const [showDone, setShowDone] = useState(false)
   const [open, setOpen] = useState<string | null>(hash ? hash.slice(1) : null)
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({ courseId: '', title: '', due: todayISO() })
 
-  const terms = useLiveQuery(() => db.terms.orderBy('createdAt').reverse().toArray(), [])
-  const termId = terms?.[0]?.id
+  const { termId: remembered, setTermId, terms } = useTermChoice()
+  // A deadline opened from the calendar names its own term; without that the
+  // page would scope to the remembered one and hide the very row being linked.
+  const linkedTerm = urlParams.get('term')
+  const termId = linkedTerm && terms?.some((t) => t.id === linkedTerm) ? linkedTerm : remembered
+  const [courseFilter, setCourseFilter] = useState('')
   const courses = useLiveQuery(
     async () => (termId ? db.courses.where('termId').equals(termId).toArray() : []),
     [termId],
   )
-  const courseIds = useMemo(() => (courses ?? []).map((c) => c.id), [courses])
+  const courseIds = useMemo(
+    () =>
+      (courses ?? [])
+        .filter((c) => !courseFilter || c.id === courseFilter)
+        .map((c) => c.id),
+    [courses, courseFilter],
+  )
 
   const assignments = useLiveQuery(
     async () =>
@@ -93,12 +105,30 @@ export function AssignmentsPage() {
               對照課表裡到截止日為止真正排了多少作業時間算出來的。
             </p>
           </div>
+          <TermPicker termId={termId} terms={terms} onChange={setTermId} id="a-term" />
+          {(courses?.length ?? 0) > 1 && (
+            <div className="field" style={{ flex: '0 0 11rem', marginBottom: 0 }}>
+              <label htmlFor="a-course">課程</label>
+              <select
+                id="a-course"
+                value={courseFilter}
+                onChange={(e) => setCourseFilter(e.target.value)}
+              >
+                <option value="">全部課程</option>
+                {(courses ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             className="btn primary"
+            style={{ flex: '0 0 auto' }}
             disabled={!courses?.length}
-            title={courses?.length ? undefined : '先建立一門課'}
             onClick={() => {
-              setForm({ courseId: courses?.[0]?.id ?? '', title: '', due: todayISO() })
+              setForm({ courseId: courseFilter || courses?.[0]?.id || '', title: '', due: todayISO() })
               setCreating(true)
             }}
           >
@@ -123,7 +153,10 @@ export function AssignmentsPage() {
           </button>
         </div>
 
-        {assignments === undefined ? (
+        {/* Courses load before assignments can be asked for, and an empty course
+            list yields an empty (not undefined) assignment list — so checking
+            only `assignments` reports "沒有未完成的作業" during every load. */}
+        {termId === undefined || courses === undefined || assignments === undefined ? (
           <div className="empty">載入中…</div>
         ) : rows.length === 0 ? (
           <div className="empty">

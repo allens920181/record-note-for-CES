@@ -26,6 +26,7 @@ import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { WeekCalendar } from '../components/WeekCalendar'
 import { MonthCalendar } from '../components/MonthCalendar'
+import { TermPicker, useTermChoice } from '../components/TermPicker'
 
 type View = 'week' | 'month'
 
@@ -46,8 +47,8 @@ export function CalendarPage() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  const terms = useLiveQuery(() => db.terms.orderBy('createdAt').reverse().toArray(), [])
-  const activeTermId = termId ?? terms?.[0]?.id ?? null
+  const { termId: chosenTerm, setTermId: chooseTerm, terms } = useTermChoice()
+  const activeTermId = termId ?? chosenTerm ?? null
 
   const courses = useLiveQuery(
     async () => (activeTermId ? db.courses.where('termId').equals(activeTermId).toArray() : []),
@@ -127,7 +128,11 @@ export function CalendarPage() {
   }
 
   function openItem(item: CalendarItem) {
-    if (item.assignmentId) navigate(`/assignments#${item.assignmentId}`)
+    // The term travels with the link: the assignments page scopes to one term,
+    // and a deadline from any other one used to land on a page that had already
+    // filtered it out — a click that visibly did nothing.
+    if (item.assignmentId)
+      navigate(`/assignments?term=${activeTermId ?? ''}#${item.assignmentId}`)
     else if (item.sessionId) navigate(`/session/${item.sessionId}`)
     else navigate(`/course/${item.courseId}`)
   }
@@ -227,20 +232,15 @@ export function CalendarPage() {
 
           <span className="spacer" />
 
-          {terms && terms.length > 1 && (
-            <select
-              aria-label="學期"
-              value={activeTermId ?? ''}
-              style={{ width: 'auto' }}
-              onChange={(e) => setTermId(e.target.value)}
-            >
-              {terms.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          )}
+          <TermPicker
+            termId={activeTermId ?? undefined}
+            terms={terms}
+            onChange={(id) => {
+              setTermId(id)
+              chooseTerm(id)
+            }}
+            id="cal-term"
+          />
         </div>
 
         {message && (

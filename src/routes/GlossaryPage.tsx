@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../db'
 import {
   addToCourse,
   addToGlobal,
@@ -15,10 +13,14 @@ import {
 } from '../schedule/glossary'
 import type { GlossaryEntry, GlossaryView } from '../schedule/glossary'
 import { TopBar } from '../components/Layout'
+import { useTermChoice } from '../components/TermPicker'
 
 export function GlossaryPage() {
-  const terms = useLiveQuery(() => db.terms.orderBy('createdAt').reverse().toArray(), [])
-  const [termId, setTermId] = useState('')
+  const { setTermId: setScopeTerm, terms } = useTermChoice()
+  // '' means every term — the glossary is the one page where that is useful,
+  // so the shared choice is a starting point rather than a hard filter.
+  const [termId, setTermId] = useState<string | null>(null)
+  const shown_term = termId ?? ''
   const [filter, setFilter] = useState('')
   const [view, setView] = useState<GlossaryView | null>(null)
   const [draft, setDraft] = useState('')
@@ -33,13 +35,13 @@ export function GlossaryPage() {
 
   useEffect(() => {
     let live = true
-    void buildGlossaryView(termId || undefined).then((v) => {
+    void buildGlossaryView(shown_term || undefined).then((v) => {
       if (live) setView(v)
     })
     return () => {
       live = false
     }
-  }, [termId, version])
+  }, [shown_term, version])
 
   useEffect(() => {
     if (!flash) return
@@ -174,13 +176,22 @@ export function GlossaryPage() {
             </div>
             <div className="field" style={{ flex: '0 0 12rem', marginBottom: 0 }}>
               <label htmlFor="g-term">學期</label>
-              <select id="g-term" value={termId} onChange={(e) => setTermId(e.target.value)}>
+              <select
+                id="g-term"
+                value={shown_term}
+                onChange={(e) => {
+                  setTermId(e.target.value)
+                  if (e.target.value) setScopeTerm(e.target.value)
+                }}
+              >
                 <option value="">全部學期</option>
-                {(terms ?? []).map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
+                {[...(terms ?? [])]
+                  .sort((a, b) => b.startDate.localeCompare(a.startDate))
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div className="field" style={{ flex: '0 0 12rem', marginBottom: 0 }}>
