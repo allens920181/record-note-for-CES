@@ -540,3 +540,26 @@ select.add-to { flex: 0 0 auto; width: 7rem; font-size: .78rem; padding: .28rem 
 .list-item.wk-doing { border-left: 3px solid var(--warn); }
 .list-item.wk-unplanned-past { border-left: 3px solid var(--danger); }
 .list-item.wk-off { opacity: .6; }
+
+/* ── setup banner ────────────────────────────────────────────────── */
+/* A reminder, not a gate: notes need none of this, so it sits above the page
+   and can be dismissed rather than standing in front of it. */
+.setup-banner {
+  border: 1px solid var(--accent); background: var(--accent-wash);
+  border-radius: var(--radius); padding: .9rem 1.1rem; margin-bottom: 1.5rem;
+}
+.setup-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.setup-steps li {
+  display: flex; align-items: center; gap: .6rem;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: .5rem .7rem;
+}
+.setup-steps .mark {
+  flex: none; width: 1.1rem; height: 1.1rem; border-radius: 50%;
+  border: 1px solid var(--line-strong); display: grid; place-items: center;
+  font-size: .7rem; color: var(--surface);
+}
+.setup-steps .is-done .mark { background: var(--accent); border-color: var(--accent); color: #fff; }
+.setup-steps .what { display: block; font-size: .88rem; font-weight: 500; }
+.setup-steps .why { display: block; font-size: .78rem; color: var(--muted); line-height: 1.5; }
+.setup-steps .is-done .what { color: var(--muted); font-weight: 400; }

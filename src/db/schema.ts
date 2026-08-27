@@ -372,6 +372,13 @@ export interface AppSettings {
   globalGlossary: string[]
   /** Target bitrate for the opus copy we send for transcription. */
   audioBitrateKbps: number
+  /**
+   * When "測試連線" last succeeded, as an ISO date. A non-empty key is not the
+   * same as a working one — a typo, a revoked key and a key for the wrong
+   * provider all look identical until something is actually sent — so setup is
+   * only counted as done once a request has come back.
+   */
+  sttVerifiedAt?: string
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

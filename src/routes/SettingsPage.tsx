@@ -281,14 +281,19 @@ export function SettingsPage() {
                 try {
                   await saveSettings(settings)
                   setSaved(true)
-                  setSttMsg({
-                    kind: 'ok',
-                    text: await testConnection({
-                      baseUrl: settings.sttBaseUrl,
-                      apiKey: settings.sttApiKey,
-                    }),
+                  const text = await testConnection({
+                    baseUrl: settings.sttBaseUrl,
+                    apiKey: settings.sttApiKey,
                   })
+                  // Stamped only on success: this is what the setup checklist
+                  // reads, and a key that has never been tried is not設定好了.
+                  const at = new Date().toISOString()
+                  await saveSettings({ sttVerifiedAt: at })
+                  setSettings({ ...settings, sttVerifiedAt: at })
+                  setSttMsg({ kind: 'ok', text })
                 } catch (err) {
+                  await saveSettings({ sttVerifiedAt: undefined })
+                  setSettings({ ...settings, sttVerifiedAt: undefined })
                   setSttMsg({
                     kind: 'err',
                     text: err instanceof Error ? err.message : String(err),

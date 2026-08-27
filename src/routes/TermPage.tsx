@@ -5,6 +5,7 @@ import { createCourse, db, deleteCourseCascade } from '../db'
 import { COURSE_COLORS } from '../db/schema'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
+import { SetupBanner } from '../components/SetupBanner'
 
 export function TermPage() {
   const { termId = '' } = useParams()
@@ -53,6 +54,8 @@ export function TermPage() {
       </TopBar>
 
       <main className="page">
+        <SetupBanner />
+
         <div className="page-head">
           <div className="grow">
             <h1>{term.name}</h1>

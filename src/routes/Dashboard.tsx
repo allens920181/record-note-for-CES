@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { createTerm, db, deleteTermCascade, todayISO } from '../db'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
+import { SetupBanner } from '../components/SetupBanner'
 
 export function Dashboard() {
   const terms = useLiveQuery(() => db.terms.orderBy('createdAt').reverse().toArray(), [])
@@ -41,6 +42,8 @@ export function Dashboard() {
       </TopBar>
 
       <main className="page">
+        <SetupBanner />
+
         <div className="page-head">
           <div className="grow">
             <h1>學期</h1>
