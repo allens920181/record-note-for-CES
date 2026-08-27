@@ -1,44 +1,52 @@
 import Dexie from 'dexie'
 import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
-import { deleteFile, deleteDir } from '../storage/fsRoot'
+import { deleteDir, deleteFile } from '../storage/fsRoot'
 import { DEFAULT_SETTINGS } from './schema'
 import { hoursBetween } from '../lib/time'
 import { addDays, todayISO } from '../lib/dates'
 import type {
   AppSettings,
+  Assignment,
+  AssignmentStatus,
   Attachment,
   ClassSlot,
-  MeetingKind,
-  Recurrence,
-  SessionKind,
-  WorkBlock,
   Course,
+  MeetingKind,
   Note,
+  Reading,
   Recording,
   RecordingDraft,
+  Recurrence,
   Session,
+  SessionKind,
+  SubTask,
   Term,
-  Transcript,
   TranscribeJob,
+  Transcript,
+  WorkBlock,
 } from './schema'
 
 export type {
   AppSettings,
+  Assignment,
+  AssignmentStatus,
   Attachment,
   ClassSlot,
-  MeetingKind,
-  Recurrence,
-  SessionKind,
-  WorkBlock,
   Course,
+  MeetingKind,
   Note,
+  Reading,
   Recording,
   RecordingDraft,
+  Recurrence,
   Session,
+  SessionKind,
+  SubTask,
   Term,
-  Transcript,
   TranscribeJob,
+  Transcript,
+  WorkBlock,
 }
 
 class NotesDB extends Dexie {
@@ -53,6 +61,8 @@ class NotesDB extends Dexie {
   attachments!: EntityTable<Attachment, 'id'>
   drafts!: EntityTable<RecordingDraft, 'id'>
   workBlocks!: EntityTable<WorkBlock, 'id'>
+  assignments!: EntityTable<Assignment, 'id'>
+  readings!: EntityTable<Reading, 'id'>
 
   constructor() {
     super('record-note-for-ces')
@@ -76,6 +86,10 @@ class NotesDB extends Dexie {
     // version transition, which makes it both untestable and unrecoverable if it
     // is ever missed. See migrateLegacyWorkSlots.
     this.version(3).stores({ workBlocks: 'id, courseId, repeat, date' })
+    this.version(4).stores({
+      assignments: 'id, courseId, due, status',
+      readings: 'id, courseId, sessionId, status',
+    })
   }
 }
 
@@ -134,6 +148,8 @@ export async function deleteCourseCascade(courseId: string): Promise<void> {
   const sessions = await db.sessions.where('courseId').equals(courseId).toArray()
   await Promise.all(sessions.map((s) => deleteSessionCascade(s.id)))
   await db.workBlocks.where('courseId').equals(courseId).delete()
+  await db.assignments.where('courseId').equals(courseId).delete()
+  await db.readings.where('courseId').equals(courseId).delete()
   const courseFiles = await db.attachments.where('courseId').equals(courseId).toArray()
   await Promise.all(courseFiles.map((a) => deleteFile(a.storageKey)))
   await db.attachments.where('courseId').equals(courseId).delete()
@@ -306,6 +322,83 @@ export async function createSessionOn(
     createdAt: Date.now(),
   })
   return id
+}
+
+// ── assignments ───────────────────────────────────────────────────────
+
+export async function createAssignment(input: {
+  courseId: string
+  title: string
+  due: string
+  sessionId?: string
+}): Promise<string> {
+  const id = newId('asg')
+  const now = Date.now()
+  await db.assignments.add({
+    ...input,
+    id,
+    status: 'todo',
+    notes: '',
+    subtasks: [],
+    createdAt: now,
+    updatedAt: now,
+  })
+  return id
+}
+
+export async function updateAssignment(
+  id: string,
+  patch: Partial<Assignment>,
+): Promise<void> {
+  await db.assignments.update(id, { ...patch, updatedAt: Date.now() })
+}
+
+export async function deleteAssignment(id: string): Promise<void> {
+  await db.assignments.delete(id)
+}
+
+export function makeSubTasks(titles: string[]): SubTask[] {
+  return titles.map((title) => ({ id: newId('st'), title, done: false }))
+}
+
+/** Where an assignment stands, for a progress bar and the status chip. */
+export function assignmentProgress(a: Assignment): { done: number; total: number } {
+  if (a.status === 'done') return { done: a.subtasks.length || 1, total: a.subtasks.length || 1 }
+  return { done: a.subtasks.filter((t) => t.done).length, total: a.subtasks.length }
+}
+
+export function estimatedHours(a: Assignment): number {
+  return a.subtasks
+    .filter((t) => !t.done)
+    .reduce((sum, t) => sum + (t.estimateHours ?? 0), 0)
+}
+
+// ── readings ──────────────────────────────────────────────────────────
+
+export async function createReading(input: {
+  courseId: string
+  title: string
+  author?: string
+  chapters?: string
+  sessionId?: string
+}): Promise<string> {
+  const id = newId('read')
+  await db.readings.add({
+    ...input,
+    id,
+    status: 'unread',
+    notes: '',
+    createdAt: Date.now(),
+  })
+  return id
+}
+
+export async function updateReading(id: string, patch: Partial<Reading>): Promise<void> {
+  await db.readings.update(id, patch)
+}
+
+export async function deleteReading(id: string): Promise<void> {
+  await db.readings.delete(id)
 }
 
 // ── study time ────────────────────────────────────────────────────────

@@ -17,9 +17,10 @@ import type { MeetingKind } from '../db/schema'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { AttachmentList } from '../components/AttachmentList'
 import { WorkBlockEditor } from '../components/WorkBlockEditor'
+import { ReadingList } from '../components/ReadingList'
 import { Modal } from '../components/Modal'
 
-type Tab = 'sessions' | 'setup'
+type Tab = 'sessions' | 'setup' | 'work'
 
 const MEETING_KINDS: MeetingKind[] = ['lecture', 'discussion']
 
@@ -136,6 +137,9 @@ export function CoursePage() {
           </button>
           <button className={`tab${tab === 'setup' ? ' active' : ''}`} onClick={() => setTab('setup')}>
             課表 · 作業時間 · 詞彙表 · 檔案
+          </button>
+          <button className={`tab${tab === 'work' ? ' active' : ''}`} onClick={() => setTab('work')}>
+            作業 · 閱讀
           </button>
         </div>
 
@@ -407,6 +411,18 @@ export function CoursePage() {
               title="課程檔案"
               hint="教學大綱與整學期共用的閱讀材料。PDF 會抽出文字，之後的跨週搜尋會用到。"
             />
+          </>
+        )}
+        {tab === 'work' && (
+          <>
+            <section className="card" style={{ marginBottom: '1.25rem' }}>
+              <h2>這門課的作業</h2>
+              <p className="small muted" style={{ margin: '.3rem 0 .6rem' }}>
+                所有課程的作業一起看、依截止日排序，在{' '}
+                <Link to="/assignments">作業頁</Link>。
+              </p>
+            </section>
+            <ReadingList courseId={courseId} />
           </>
         )}
       </main>

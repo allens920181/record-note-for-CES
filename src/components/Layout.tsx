@@ -31,8 +31,14 @@ export function TopBar({ children }: { children?: ReactNode }) {
       </Link>
       {children}
       <span className="spacer" />
+      <Link to="/search" className="btn ghost sm">
+        搜尋
+      </Link>
       <Link to="/calendar" className="btn ghost sm">
         行事曆
+      </Link>
+      <Link to="/assignments" className="btn ghost sm">
+        作業
       </Link>
       <Link to="/settings" className="btn ghost sm">
         設定

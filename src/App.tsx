@@ -5,6 +5,8 @@ import { Dashboard } from './routes/Dashboard'
 import { TermPage } from './routes/TermPage'
 import { CoursePage } from './routes/CoursePage'
 import { CalendarPage } from './routes/CalendarPage'
+import { AssignmentsPage } from './routes/AssignmentsPage'
+import { SearchPage } from './routes/SearchPage'
 import { SessionPage } from './routes/SessionPage'
 import { SettingsPage } from './routes/SettingsPage'
 import { migrateLegacyWorkSlots } from './db'
@@ -27,6 +29,8 @@ export function App() {
           <Route path="/term/:termId" element={<TermPage />} />
           <Route path="/course/:courseId" element={<CoursePage />} />
           <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/assignments" element={<AssignmentsPage />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/session/:sessionId" element={<SessionPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Dashboard />} />

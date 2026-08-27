@@ -1,8 +1,8 @@
-import type { Course, Session, WorkBlock } from '../db'
+import type { Assignment, Course, Session, WorkBlock } from '../db'
 import { MEETING_KIND_LABEL } from '../db/schema'
 import { addDays, minutesOf, weekdayOf } from '../lib/dates'
 
-export type ItemKind = 'lecture' | 'discussion' | 'work'
+export type ItemKind = 'lecture' | 'discussion' | 'work' | 'deadline'
 
 export interface CalendarItem {
   /** Stable per occurrence, so React keys survive a re-expand. */
@@ -21,6 +21,7 @@ export interface CalendarItem {
   /** Meetings open their workspace; study blocks have no page of their own. */
   sessionId?: string
   workBlockId?: string
+  assignmentId?: string
 }
 
 export interface ExpandInput {
@@ -29,6 +30,7 @@ export interface ExpandInput {
   courses: Course[]
   sessions: Session[]
   workBlocks: WorkBlock[]
+  assignments?: Assignment[]
 }
 
 /**
@@ -44,6 +46,7 @@ export function expandOccurrences({
   courses,
   sessions,
   workBlocks,
+  assignments = [],
 }: ExpandInput): CalendarItem[] {
   const byId = new Map(courses.map((c) => [c.id, c]))
   const items: CalendarItem[] = []
@@ -96,6 +99,27 @@ export function expandOccurrences({
       if (weekdayOf(date) !== block.weekday) continue
       items.push({ ...base, key: `w:${block.id}:${date}`, date })
     }
+  }
+
+  for (const assignment of assignments) {
+    if (assignment.due < from || assignment.due > to) continue
+    const course = byId.get(assignment.courseId)
+    if (!course) continue
+    items.push({
+      key: `a:${assignment.id}`,
+      kind: 'deadline',
+      courseId: course.id,
+      courseName: course.name,
+      color: course.color,
+      date: assignment.due,
+      // An untimed deadline belongs in the all-day strip, not parked at 00:00.
+      startMin: minutesOf(assignment.dueTime),
+      endMin: null,
+      title: `繳交：${assignment.title}`,
+      detail: course.name,
+      canceled: assignment.status === 'done',
+      assignmentId: assignment.id,
+    })
   }
 
   return items.sort(

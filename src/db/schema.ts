@@ -176,6 +176,76 @@ export interface RecordingDraft {
   updatedAt: number
 }
 
+export type AssignmentStatus = 'todo' | 'doing' | 'done'
+
+export const ASSIGNMENT_STATUS_LABEL: Record<AssignmentStatus, string> = {
+  todo: '未開始',
+  doing: '進行中',
+  done: '已完成',
+}
+
+export interface SubTask {
+  id: string
+  title: string
+  done: boolean
+  /** Rough hours this step will take, used against available study time. */
+  estimateHours?: number
+}
+
+export interface Assignment {
+  id: string
+  courseId: string
+  title: string
+  /** ISO yyyy-mm-dd. */
+  due: string
+  /** "HH:MM" when the deadline is a specific time of day. */
+  dueTime?: string
+  status: AssignmentStatus
+  /** Free text: the brief, the required word count, the citation style. */
+  notes: string
+  subtasks: SubTask[]
+  /** The week this assignment came out of, if any. */
+  sessionId?: string
+  createdAt: number
+  updatedAt: number
+}
+
+/** Common shapes of seminary work, offered when breaking an assignment down. */
+export const SUBTASK_TEMPLATES: Array<{ name: string; steps: string[] }> = [
+  {
+    name: '期末報告',
+    steps: ['選題與範圍', '找文獻', '擬大綱', '寫初稿', '修改與引註'],
+  },
+  { name: '讀書報告', steps: ['讀完指定章節', '整理重點', '寫回應', '校對'] },
+  { name: '講道稿', steps: ['釋經', '大綱', '寫講章', '練講'] },
+]
+
+export type ReadingStatus = 'unread' | 'reading' | 'read'
+
+export const READING_STATUS_LABEL: Record<ReadingStatus, string> = {
+  unread: '未讀',
+  reading: '讀到一半',
+  read: '已讀完',
+}
+
+export interface Reading {
+  id: string
+  courseId: string
+  title: string
+  author?: string
+  /** Free text: "第三卷 21–24 章" reads better than a page range alone. */
+  chapters?: string
+  totalPages?: number
+  pagesRead?: number
+  status: ReadingStatus
+  /** The week this reading is assigned for. */
+  sessionId?: string
+  /** A PDF already uploaded to this course. */
+  attachmentId?: string
+  notes: string
+  createdAt: number
+}
+
 export type JobStatus = 'pending' | 'preparing' | 'transcribing' | 'done' | 'error'
 
 export interface TranscribeJob {

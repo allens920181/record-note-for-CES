@@ -399,3 +399,32 @@ a.list-item:hover { border-color: var(--accent); }
   .wk { overflow-x: auto; }
   .mo-cell { min-height: 4.6rem; }
 }
+
+/* Deadlines are a different species from meetings — mark them, don't tint them. */
+.cal-block.kind-deadline, .cal-chip.kind-deadline {
+  border-left-width: 3px; border-style: solid;
+  background: var(--danger-wash); font-weight: 500;
+}
+
+/* ── assignments ─────────────────────────────────────────────────── */
+.asg { padding: 0; overflow: hidden; }
+.asg-head {
+  display: flex; align-items: center; gap: .8rem;
+  padding: .85rem 1.1rem; cursor: pointer;
+}
+.asg-head:hover { background: var(--surface-2); }
+.asg-detail { padding: 0 1.1rem 1.1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.asg-detail h3 { margin-top: 0; }
+.subtask input[type='checkbox'] { accent-color: var(--accent); }
+
+/* ── search ──────────────────────────────────────────────────────── */
+.hit { border: 1px solid var(--line); font-family: var(--body); }
+.hit:hover { border-color: var(--accent); }
+.hit-snippet {
+  display: block; margin-top: .2rem; font-size: .88rem; line-height: 1.7;
+  color: var(--ink); word-break: break-word;
+}
+.hit-snippet mark {
+  background: var(--accent-wash); color: var(--accent-ink);
+  padding: 0 .12em; border-radius: 2px; font-weight: 500;
+}

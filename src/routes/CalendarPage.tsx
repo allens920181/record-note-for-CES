@@ -76,6 +76,10 @@ export function CalendarPage() {
     async () => (courseIds.length ? db.workBlocks.where('courseId').anyOf(courseIds).toArray() : []),
     [courseIds.join(',')],
   )
+  const assignments = useLiveQuery(
+    async () => (courseIds.length ? db.assignments.where('courseId').anyOf(courseIds).toArray() : []),
+    [courseIds.join(',')],
+  )
 
   const range = useMemo(() => {
     if (view === 'week') {
@@ -95,8 +99,9 @@ export function CalendarPage() {
         courses: courses ?? [],
         sessions: sessions ?? [],
         workBlocks: workBlocks ?? [],
+        assignments: assignments ?? [],
       }),
-    [range.from, range.to, courses, sessions, workBlocks],
+    [range.from, range.to, courses, sessions, workBlocks, assignments],
   )
 
   useEffect(() => {
@@ -122,7 +127,8 @@ export function CalendarPage() {
   }
 
   function openItem(item: CalendarItem) {
-    if (item.sessionId) navigate(`/session/${item.sessionId}`)
+    if (item.assignmentId) navigate(`/assignments#${item.assignmentId}`)
+    else if (item.sessionId) navigate(`/session/${item.sessionId}`)
     else navigate(`/course/${item.courseId}`)
   }
 

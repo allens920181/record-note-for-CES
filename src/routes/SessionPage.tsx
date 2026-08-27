@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, saveNote } from '../db'
 import type { SessionKind, TranscriptSegment } from '../db/schema'
@@ -33,6 +33,7 @@ function findActive(segments: TranscriptSegment[], t: number): number {
 
 export function SessionPage() {
   const { sessionId = '' } = useParams()
+  const [searchParams] = useSearchParams()
 
   const session = useLiveQuery(() => db.sessions.get(sessionId), [sessionId])
   const course = useLiveQuery(
@@ -111,6 +112,24 @@ export function SessionPage() {
     const el = listRef.current.querySelector<HTMLElement>(`[data-seg="${activeIndex}"]`)
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [activeIndex, follow])
+
+  // A search result arrives as ?t=seconds; jump there once the audio is ready.
+  const jumpTo = searchParams.get('t')
+  const jumped = useRef(false)
+  useEffect(() => {
+    if (!jumpTo || jumped.current || !audioUrl) return
+    const seconds = Number(jumpTo)
+    if (!Number.isFinite(seconds)) return
+    const audio = audioRef.current
+    if (!audio) return
+    jumped.current = true
+    const go = () => {
+      audio.currentTime = seconds
+      setCurrentTime(seconds)
+    }
+    if (audio.readyState >= 1) go()
+    else audio.addEventListener('loadedmetadata', go, { once: true })
+  }, [jumpTo, audioUrl])
 
   const seek = useCallback((seconds: number) => {
     const audio = audioRef.current
