@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, recordCorrection, saveNote } from '../db'
+import { db, deleteTranscription, recordCorrection, saveNote } from '../db'
 import type { SessionKind, TranscriptSegment } from '../db/schema'
 import { SESSION_KIND_LABEL } from '../db/schema'
 import { readFile, rootStatus } from '../storage/fsRoot'
@@ -14,6 +14,7 @@ import { WeekPlanPanel } from '../components/WeekPlanPanel'
 import type { NoteEditorHandle } from '../components/NoteEditor'
 import { RecorderPanel } from '../components/RecorderPanel'
 import { AttachmentList } from '../components/AttachmentList'
+import { Modal } from '../components/Modal'
 
 /** Index of the last segment that has started by time `t`. */
 function findActive(segments: TranscriptSegment[], t: number): number {
@@ -73,6 +74,8 @@ export function SessionPage() {
   const [showFiles, setShowFiles] = useState(false)
   /** Below 60rem only one pane fits; this says which. */
   const [narrowPane, setNarrowPane] = useState<'left' | 'note'>('left')
+  /** Which of the three transcript actions is being confirmed, if any. */
+  const [redo, setRedo] = useState<'again' | 'replace' | 'drop' | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<RunProgress | null>(null)
@@ -186,23 +189,31 @@ export function SessionPage() {
   )
 
   const handleFile = useCallback(
-    async (file: File) => {
+    async (file: File, replaces?: string) => {
       setError(null)
       setBusy(true)
       setProgress({ stage: '準備中', done: 0, total: 0 })
       const controller = new AbortController()
       abortRef.current = controller
       try {
-        await runTranscription(sessionId, file, setProgress, controller.signal, async (w) => {
-          // Seconds, not rounded minutes: this dialog only ever appears when the
-          // headroom is nearly gone, and "約 0 分鐘 / 只剩約 0 分鐘" says nothing.
-          return confirm(
-            `這份錄音 ${formatQuota(w.needSeconds)}，但今天的免費額度只剩 ` +
-              `${formatQuota(w.remainingTodaySeconds)}。\n\n` +
-              `超過的部分會被服務端擋下並自動重試，可能要等到額度回補。\n` +
-              `要繼續嗎？`,
-          )
-        })
+        await runTranscription(
+          sessionId,
+          file,
+          setProgress,
+          controller.signal,
+          async (w) => {
+            // Seconds, not rounded minutes: this dialog only ever appears when
+            // the headroom is nearly gone, and "約 0 分鐘 / 只剩約 0 分鐘" says
+            // nothing.
+            return confirm(
+              `這份錄音 ${formatQuota(w.needSeconds)}，但今天的免費額度只剩 ` +
+                `${formatQuota(w.remainingTodaySeconds)}。\n\n` +
+                `超過的部分會被服務端擋下並自動重試，可能要等到額度回補。\n` +
+                `要繼續嗎？`,
+            )
+          },
+          replaces,
+        )
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
           setError(err instanceof Error ? err.message : String(err))
@@ -215,6 +226,21 @@ export function SessionPage() {
     },
     [sessionId],
   )
+
+  /** Runs the same audio through again, replacing what is there now. */
+  const transcribeAgain = useCallback(async () => {
+    if (!recording) return
+    const file = await readFile(recording.storageKey)
+    if (!file) {
+      setError(`找不到 ${recording.fileName}——資料夾可能移動過，或權限需要重新授權。`)
+      return
+    }
+    // The transcript goes first so the workspace shows the intake state while
+    // this runs; the recording is handed to runTranscription as `replaces` and
+    // removed only once the new one is on disk.
+    await db.transcripts.where('sessionId').equals(sessionId).delete()
+    await handleFile(new File([file], recording.fileName, { type: file.type }), recording.id)
+  }, [recording, sessionId, handleFile])
 
   const plan = useLiveQuery(() => db.weekPlans.get(sessionId), [sessionId])
   const fileCount = useLiveQuery(
@@ -384,6 +410,13 @@ export function SessionPage() {
                   </button>
                   <button className="btn ghost sm" onClick={() => setEditingTranscript((v) => !v)}>
                     {editingTranscript ? '完成編輯' : '修正錯字'}
+                  </button>
+                  <button
+                    className="btn ghost sm"
+                    title="重新轉錄、換音檔，或刪掉這份逐字稿"
+                    onClick={() => setRedo('again')}
+                  >
+                    ⋯
                   </button>
                 </>
               )}
@@ -582,6 +615,66 @@ export function SessionPage() {
           </section>
         </div>
       </div>
+
+      {redo && (
+        <Modal
+          title="這份逐字稿"
+          onClose={() => setRedo(null)}
+          submitLabel={undefined}
+        >
+          <p className="small muted" style={{ margin: '0 0 .9rem' }}>
+            以下三個動作都<strong>只影響逐字稿與音檔</strong>——你的筆記和本週進度會原封不動留著。
+          </p>
+          <div className="stack">
+            <button
+              className="btn"
+              disabled={!recording}
+              onClick={() => {
+                setRedo(null)
+                void transcribeAgain()
+              }}
+            >
+              用同一個音檔再轉一次
+              <span className="small muted" style={{ display: 'block', fontWeight: 400 }}>
+                語言或模型設定改過之後用這個。會再花一次額度。
+              </span>
+            </button>
+            <label className="btn">
+              換一個音檔重新轉錄
+              <span className="small muted" style={{ display: 'block', fontWeight: 400 }}>
+                錄錯了、或找到更清楚的一份錄音。
+              </span>
+              <input
+                type="file"
+                accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!file) return
+                  setRedo(null)
+                  void (async () => {
+                    await db.transcripts.where('sessionId').equals(sessionId).delete()
+                    await handleFile(file, recording?.id)
+                  })()
+                }}
+              />
+            </label>
+            <button
+              className="btn danger"
+              onClick={async () => {
+                setRedo(null)
+                await deleteTranscription(sessionId)
+              }}
+            >
+              刪除逐字稿與音檔
+              <span className="small muted" style={{ display: 'block', fontWeight: 400 }}>
+                回到還沒錄音的狀態。筆記與本週進度保留。
+              </span>
+            </button>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }

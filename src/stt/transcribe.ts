@@ -1,4 +1,4 @@
-import { db, getSettings, quotaState, recordUsage } from '../db'
+import { db, deleteRecording, getSettings, quotaState, recordUsage } from '../db'
 import type { Course, TranscriptSegment } from '../db/schema'
 import { newId } from '../lib/id'
 import { prepareChunks } from '../audio/ffmpegClient'
@@ -58,6 +58,34 @@ async function withRetry<T>(
   throw lastError
 }
 
+/**
+ * The clip's length, read from the browser's own demuxer before any work is
+ * done. Cheap enough to ask before downloading a 32 MB engine and encoding the
+ * whole file — which is what the quota question used to cost, so answering "no"
+ * meant the waiting had already happened.
+ */
+function probeDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const audio = new Audio()
+    const done = (value: number | null) => {
+      URL.revokeObjectURL(url)
+      resolve(value)
+    }
+    const timer = setTimeout(() => done(null), 8_000)
+    audio.preload = 'metadata'
+    audio.onloadedmetadata = () => {
+      clearTimeout(timer)
+      done(Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null)
+    }
+    audio.onerror = () => {
+      clearTimeout(timer)
+      done(null)
+    }
+    audio.src = url
+  })
+}
+
 export interface RunProgress {
   stage: string
   done: number
@@ -84,8 +112,10 @@ export async function runTranscription(
   file: File,
   onProgress: (p: RunProgress) => void,
   signal?: AbortSignal,
-  /** Asked once, after the length is known, if this job would exceed the free tier. */
+  /** Asked once, before any work is done, if this job would exceed the free tier. */
   confirmOverQuota?: (w: QuotaWarning) => Promise<boolean>,
+  /** Recording this run supersedes; removed once the new one is stored. */
+  replaces?: string,
 ): Promise<string> {
   const settings = await getSettings()
   if (!settings.sttApiKey) {
@@ -116,6 +146,20 @@ export async function runTranscription(
     db.jobs.update(jobId, { ...patch, updatedAt: Date.now() })
 
   try {
+    // ── 0. ask about the quota before spending anything ────────────────
+    // Only skipped when the browser cannot read the length, in which case the
+    // same question is asked after encoding rather than not at all.
+    let asked = false
+    if (confirmOverQuota) {
+      const probed = await probeDuration(file)
+      if (probed !== null) {
+        asked = true
+        if (!(await withinQuota(probed, confirmOverQuota))) {
+          throw new DOMException('已取消', 'AbortError')
+        }
+      }
+    }
+
     // ── 1. encode + cut ────────────────────────────────────────────────
     const stageLabel: Record<PrepareProgress['stage'], string> = {
       'loading-core': '載入音訊處理引擎（第一次約 32 MB）',
@@ -135,18 +179,9 @@ export async function runTranscription(
     )
     if (signal?.aborted) throw new DOMException('已取消', 'AbortError')
 
-    // ── 1b. warn before running into the free tier's wall ──────────────
-    if (confirmOverQuota) {
-      const quota = await quotaState()
-      const needSeconds = Math.round(prepared.durationSec)
-      if (needSeconds > quota.remainingToday) {
-        const go = await confirmOverQuota({
-          needSeconds,
-          remainingTodaySeconds: quota.remainingToday,
-          remainingThisHourSeconds: quota.remainingThisHour,
-        })
-        if (!go) throw new DOMException('已取消', 'AbortError')
-      }
+    // Fallback for a file the browser could not measure up front.
+    if (confirmOverQuota && !asked && !(await withinQuota(prepared.durationSec, confirmOverQuota))) {
+      throw new DOMException('已取消', 'AbortError')
     }
 
     // ── 2. keep the compact copy the player will use ───────────────────
@@ -163,6 +198,10 @@ export async function runTranscription(
       durationSec: prepared.durationSec,
       createdAt: Date.now(),
     })
+
+    // The old audio goes only after the new row exists: a deleted file with a
+    // row still pointing at it is invisible, and the reverse is merely tidy-up.
+    if (replaces) await deleteRecording(replaces)
 
     // ── 3. transcribe each chunk in turn ───────────────────────────────
     const cfg: SttConfig = {
@@ -247,6 +286,21 @@ export async function runTranscription(
     await setJob({ status: 'error', stage: '中止', error: message })
     throw err
   }
+}
+
+/** True to go ahead: either inside the day's remaining seconds, or confirmed. */
+async function withinQuota(
+  seconds: number,
+  confirm: (w: QuotaWarning) => Promise<boolean>,
+): Promise<boolean> {
+  const quota = await quotaState()
+  const needSeconds = Math.round(seconds)
+  if (needSeconds <= quota.remainingToday) return true
+  return confirm({
+    needSeconds,
+    remainingTodaySeconds: quota.remainingToday,
+    remainingThisHourSeconds: quota.remainingThisHour,
+  })
 }
 
 /**

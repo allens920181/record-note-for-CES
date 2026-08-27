@@ -784,6 +784,34 @@ export async function courseProgress(courseId: string): Promise<CourseProgress> 
   }
 }
 
+// ── transcripts and recordings ────────────────────────────────────────
+
+/** Removes one recording row and the audio behind it. */
+export async function deleteRecording(recordingId: string): Promise<void> {
+  const row = await db.recordings.get(recordingId)
+  if (!row) return
+  await deleteFile(row.storageKey)
+  await db.recordings.delete(recordingId)
+}
+
+/**
+ * Drops a session's transcript and audio, keeping the note and the week plan.
+ *
+ * The only way to undo a bad transcription used to be deleting the whole
+ * session, which took the notes with it — so a wrong language setting cost an
+ * evening's writing rather than one re-run.
+ */
+export async function deleteTranscription(sessionId: string): Promise<void> {
+  const [transcripts, recordings] = await Promise.all([
+    db.transcripts.where('sessionId').equals(sessionId).toArray(),
+    db.recordings.where('sessionId').equals(sessionId).toArray(),
+  ])
+  await Promise.all(recordings.map((r) => deleteFile(r.storageKey)))
+  await db.transcripts.bulkDelete(transcripts.map((t) => t.id))
+  await db.recordings.bulkDelete(recordings.map((r) => r.id))
+  await db.jobs.where('sessionId').equals(sessionId).delete()
+}
+
 // ── notes ─────────────────────────────────────────────────────────────
 
 export async function saveNote(sessionId: string, markdown: string): Promise<void> {
