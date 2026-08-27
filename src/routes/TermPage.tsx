@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { createCourse, db, deleteCourseCascade } from '../db'
+import { createCourse, db, deleteCourseCascade, sessionsInTerm, updateCourse, updateTerm } from '../db'
 import { COURSE_COLORS } from '../db/schema'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { SetupBanner } from '../components/SetupBanner'
+import { CourseForm, EMPTY_COURSE } from '../components/CourseForm'
+import type { CourseDraft } from '../components/CourseForm'
 
 export function TermPage() {
   const { termId = '' } = useParams()
@@ -22,26 +24,49 @@ export function TermPage() {
   }, [])
 
   const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
-  const [teacher, setTeacher] = useState('')
-  const [code, setCode] = useState('')
-  const [credits, setCredits] = useState(3)
+  const [draft, setDraft] = useState<CourseDraft>(EMPTY_COURSE)
+  /** Course being edited, or null. */
+  const [editing, setEditing] = useState<string | null>(null)
+  const [termDraft, setTermDraft] = useState<{
+    name: string
+    startDate: string
+    endDate: string
+    weeks: number
+  } | null>(null)
+  const [affected, setAffected] = useState(0)
+  const [notice, setNotice] = useState<string | null>(null)
 
   async function submit() {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    await createCourse({
-      termId,
-      name: trimmed,
-      teacher: teacher.trim(),
-      code: code.trim(),
-      credits,
-      color: COURSE_COLORS[(courses?.length ?? 0) % COURSE_COLORS.length],
-    })
-    setName('')
-    setTeacher('')
-    setCode('')
+    const name = draft.name.trim()
+    if (!name) return
+    if (editing) {
+      await updateCourse(editing, { ...draft, name, teacher: draft.teacher.trim(), code: draft.code.trim() })
+      setNotice(`已更新「${name}」。`)
+    } else {
+      await createCourse({
+        termId,
+        name,
+        teacher: draft.teacher.trim(),
+        code: draft.code.trim(),
+        credits: draft.credits,
+        color: COURSE_COLORS[(courses?.length ?? 0) % COURSE_COLORS.length],
+      })
+    }
+    setDraft(EMPTY_COURSE)
+    setEditing(null)
     setCreating(false)
+  }
+
+  async function submitTerm() {
+    if (!termDraft || !termDraft.name.trim()) return
+    const { renumbered } = await updateTerm(termId, {
+      name: termDraft.name.trim(),
+      startDate: termDraft.startDate,
+      endDate: termDraft.endDate,
+      weeks: termDraft.weeks,
+    })
+    setTermDraft(null)
+    setNotice(renumbered > 0 ? `已更新學期，並重新編號 ${renumbered} 個週次。` : '已更新學期。')
   }
 
   if (term === undefined) return <div className="page">載入中…</div>
@@ -63,10 +88,31 @@ export function TermPage() {
               {term.startDate} 起 · {term.weeks} 週
             </p>
           </div>
-          <button className="btn primary" onClick={() => setCreating(true)}>
+          <button
+            className="btn"
+            style={{ flex: '0 0 auto' }}
+            onClick={async () => {
+              setAffected(await sessionsInTerm(termId))
+              setTermDraft({
+                name: term.name,
+                startDate: term.startDate,
+                endDate: term.endDate,
+                weeks: term.weeks,
+              })
+            }}
+          >
+            編輯學期
+          </button>
+          <button className="btn primary" style={{ flex: '0 0 auto' }} onClick={() => setCreating(true)}>
             新增課程
           </button>
         </div>
+
+        {notice && (
+          <div className="notice ok" style={{ marginBottom: '1rem' }}>
+            {notice}
+          </div>
+        )}
 
         {courses === undefined ? (
           <div className="empty">載入中…</div>
@@ -103,6 +149,22 @@ export function TermPage() {
                 >
                   刪除
                 </button>
+                <button
+                  className="btn ghost sm"
+                  onClick={() => {
+                    setDraft({
+                      name: c.name,
+                      teacher: c.teacher,
+                      code: c.code,
+                      credits: c.credits,
+                      color: c.color,
+                    })
+                    setEditing(c.id)
+                    setCreating(true)
+                  }}
+                >
+                  編輯
+                </button>
               </div>
             ))}
           </div>
@@ -111,44 +173,79 @@ export function TermPage() {
 
       {creating && (
         <Modal
-          title="新增課程"
-          onClose={() => setCreating(false)}
+          title={editing ? '編輯課程' : '新增課程'}
+          onClose={() => {
+            setCreating(false)
+            setEditing(null)
+            setDraft(EMPTY_COURSE)
+          }}
           onSubmit={submit}
-          submitLabel="建立"
-          submitDisabled={!name.trim()}
+          submitLabel={editing ? '儲存' : '建立'}
+          submitDisabled={!draft.name.trim()}
+        >
+          <CourseForm value={draft} onChange={setDraft} showColor={Boolean(editing)} />
+        </Modal>
+      )}
+
+      {termDraft && (
+        <Modal
+          title="編輯學期"
+          onClose={() => setTermDraft(null)}
+          onSubmit={submitTerm}
+          submitLabel="儲存"
+          submitDisabled={!termDraft.name.trim()}
         >
           <div className="field">
-            <label htmlFor="c-name">課程名稱</label>
+            <label htmlFor="t-name">學期名稱</label>
             <input
-              id="c-name"
+              id="t-name"
               type="text"
-              value={name}
               autoFocus
-              placeholder="系統神學（一）"
-              onChange={(e) => setName(e.target.value)}
+              value={termDraft.name}
+              onChange={(e) => setTermDraft({ ...termDraft, name: e.target.value })}
             />
           </div>
           <div className="row">
             <div className="field">
-              <label htmlFor="c-teacher">授課老師</label>
-              <input id="c-teacher" type="text" value={teacher} onChange={(e) => setTeacher(e.target.value)} />
-            </div>
-            <div className="field">
-              <label htmlFor="c-code">課號</label>
-              <input id="c-code" type="text" value={code} onChange={(e) => setCode(e.target.value)} />
-            </div>
-            <div className="field">
-              <label htmlFor="c-credits">學分</label>
+              <label htmlFor="t-start">開始日</label>
               <input
-                id="c-credits"
-                type="number"
-                min={0}
-                max={12}
-                value={credits}
-                onChange={(e) => setCredits(Number(e.target.value))}
+                id="t-start"
+                type="date"
+                value={termDraft.startDate}
+                onChange={(e) => setTermDraft({ ...termDraft, startDate: e.target.value })}
               />
             </div>
+            <div className="field">
+              <label htmlFor="t-end">結束日</label>
+              <input
+                id="t-end"
+                type="date"
+                value={termDraft.endDate}
+                onChange={(e) => setTermDraft({ ...termDraft, endDate: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="t-weeks">週數</label>
+              <input
+                id="t-weeks"
+                type="number"
+                min={1}
+                max={30}
+                value={termDraft.weeks}
+                onChange={(e) =>
+                  setTermDraft({ ...termDraft, weeks: Math.max(1, Number(e.target.value) || 1) })
+                }
+              />
+              <div className="hint">密集課 6 週、暑期班 8 週都填得進來。</div>
+            </div>
           </div>
+          {affected > 0 &&
+            (termDraft.startDate !== term.startDate || termDraft.weeks !== term.weeks) && (
+              <div className="notice warn">
+                改動開始日或週數後，這個學期已建立的 {affected} 個週次會依新的開始日重新編號。
+                週次本身不會被刪除。
+              </div>
+            )}
         </Modal>
       )}
     </>

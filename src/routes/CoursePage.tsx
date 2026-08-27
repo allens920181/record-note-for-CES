@@ -6,6 +6,7 @@ import {
   createSessionOn,
   db,
   deleteSessionCascade,
+  updateCourse,
   generateSessionsFromTimetable,
   renumberSessions,
   sumWorkHours,
@@ -22,6 +23,8 @@ import { CorrectionsPanel } from '../components/CorrectionsPanel'
 import { RequirementsPanel } from '../components/RequirementsPanel'
 import { ProgressOverview } from '../components/ProgressOverview'
 import { Modal } from '../components/Modal'
+import { CourseForm } from '../components/CourseForm'
+import type { CourseDraft } from '../components/CourseForm'
 
 type Tab = 'sessions' | 'setup' | 'work' | 'require'
 
@@ -33,6 +36,7 @@ export function CoursePage() {
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
   const [adding, setAdding] = useState<MeetingKind | null>(null)
   const [addDate, setAddDate] = useState(todayISO())
+  const [courseDraft, setCourseDraft] = useState<CourseDraft | null>(null)
 
   const course = useLiveQuery(() => db.courses.get(courseId), [courseId])
   const term = useLiveQuery(
@@ -138,6 +142,21 @@ export function CoursePage() {
               {hours.total > 0 && ` · 作業時間共 ${hours.total} 小時`}
             </p>
           </div>
+          <button
+            className="btn"
+            style={{ flex: '0 0 auto' }}
+            onClick={() => {
+              setCourseDraft({
+                name: course.name,
+                teacher: course.teacher,
+                code: course.code,
+                credits: course.credits,
+                color: course.color,
+              })
+            }}
+          >
+            編輯課程
+          </button>
         </div>
 
         <div className="tabs">
@@ -484,6 +503,28 @@ export function CoursePage() {
           </>
         )}
       </main>
+
+      {courseDraft && (
+        <Modal
+          title="編輯課程"
+          onClose={() => setCourseDraft(null)}
+          onSubmit={async () => {
+            const name = courseDraft.name.trim()
+            if (!name) return
+            await updateCourse(courseId, {
+              ...courseDraft,
+              name,
+              teacher: courseDraft.teacher.trim(),
+              code: courseDraft.code.trim(),
+            })
+            setCourseDraft(null)
+          }}
+          submitLabel="儲存"
+          submitDisabled={!courseDraft.name.trim()}
+        >
+          <CourseForm value={courseDraft} onChange={setCourseDraft} showColor />
+        </Modal>
+      )}
 
       {adding && (
         <Modal

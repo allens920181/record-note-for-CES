@@ -181,6 +181,48 @@ export async function deleteCourseCascade(courseId: string): Promise<void> {
   await db.courses.delete(courseId)
 }
 
+/**
+ * Renames a term or moves its dates. A changed start date or week count shifts
+ * every session's week number, so the whole term is renumbered — a session that
+ * kept its old "第 N 週" after the term moved would disagree with the timetable
+ * that produced it, silently and in the one label people navigate by.
+ */
+export async function updateTerm(
+  termId: string,
+  patch: Partial<Pick<Term, 'name' | 'startDate' | 'endDate' | 'weeks'>>,
+): Promise<{ renumbered: number }> {
+  const before = await db.terms.get(termId)
+  if (!before) return { renumbered: 0 }
+  await db.terms.update(termId, patch)
+
+  const movedStart = patch.startDate !== undefined && patch.startDate !== before.startDate
+  const movedWeeks = patch.weeks !== undefined && patch.weeks !== before.weeks
+  if (!movedStart && !movedWeeks) return { renumbered: 0 }
+
+  const courses = await db.courses.where('termId').equals(termId).toArray()
+  await Promise.all(courses.map((c) => renumberSessions(c.id)))
+  const counts = await Promise.all(
+    courses.map((c) => db.sessions.where('courseId').equals(c.id).count()),
+  )
+  return { renumbered: counts.reduce((a, b) => a + b, 0) }
+}
+
+/** How many sessions a date or week-count change would renumber. */
+export async function sessionsInTerm(termId: string): Promise<number> {
+  const courses = await db.courses.where('termId').equals(termId).toArray()
+  const counts = await Promise.all(
+    courses.map((c) => db.sessions.where('courseId').equals(c.id).count()),
+  )
+  return counts.reduce((a, b) => a + b, 0)
+}
+
+export async function updateCourse(
+  courseId: string,
+  patch: Partial<Pick<Course, 'name' | 'teacher' | 'code' | 'credits' | 'color'>>,
+): Promise<void> {
+  await db.courses.update(courseId, patch)
+}
+
 // ── sessions ──────────────────────────────────────────────────────────
 
 /**

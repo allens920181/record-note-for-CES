@@ -120,11 +120,18 @@ export function Dashboard() {
             </div>
             <div className="field">
               <label htmlFor="term-weeks">週數</label>
-              <select id="term-weeks" value={weeks} onChange={(e) => setWeeks(Number(e.target.value))}>
-                <option value={15}>15 週</option>
-                <option value={16}>16 週</option>
-                <option value={18}>18 週</option>
-              </select>
+              {/* A number, not three options: the generator loops over whatever
+                  integer it is given, so 6 for a summer intensive and 12 for a
+                  block course were only ever excluded by this control. */}
+              <input
+                id="term-weeks"
+                type="number"
+                min={1}
+                max={30}
+                value={weeks}
+                onChange={(e) => setWeeks(Math.max(1, Number(e.target.value) || 1))}
+              />
+              <div className="hint">之後在學期頁可以改。</div>
             </div>
           </div>
         </Modal>
