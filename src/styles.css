@@ -311,3 +311,9 @@ a.list-item:hover { border-color: var(--accent); }
 /* Work-time slots schedule effort, not a meeting — they produce no file. */
 .slot-row.is-work { opacity: .78; }
 .slot-row.is-work select, .slot-row.is-work input { border-style: dashed; }
+
+/* A computed value, not a field — must not read as a disabled input. */
+.slot-hours {
+  flex: 0 0 auto; align-self: center; padding-top: 1.1rem;
+  font-size: .78rem; color: var(--muted); white-space: nowrap;
+}

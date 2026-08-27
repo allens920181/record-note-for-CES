@@ -39,3 +39,18 @@ export function formatDuration(sec: number): string {
   const m = Math.round((sec % 3600) / 60)
   return h > 0 ? `${h} 小時 ${m} 分` : `${m} 分`
 }
+
+/** Hours between two "HH:MM" times. 0 when either is unparseable or reversed. */
+export function hoursBetween(start: string, end: string): number {
+  const parse = (t: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim())
+    if (!m) return null
+    const h = Number(m[1])
+    const min = Number(m[2])
+    return h > 23 || min > 59 ? null : h * 60 + min
+  }
+  const from = parse(start)
+  const to = parse(end)
+  if (from === null || to === null || to <= from) return 0
+  return Math.round(((to - from) / 60) * 10) / 10
+}

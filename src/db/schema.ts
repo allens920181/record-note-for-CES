@@ -3,23 +3,15 @@
 // across machines without renumbering.
 
 /**
- * What a scheduled block of time actually is. Lectures and discussions are
- * meetings worth recording and each gets its own weekly file; work time is a
- * block set aside for coursework and produces no recording at all.
+ * A timetable slot is a *recurring meeting* — the thing that repeats every week
+ * and turns into weekly files. Study time is deliberately not a slot kind: it
+ * produces no file, and it often isn't weekly, so it lives in its own store.
  */
-export type SlotKind = 'lecture' | 'discussion' | 'work'
+export type MeetingKind = 'lecture' | 'discussion'
 
-export const SLOT_KIND_LABEL: Record<SlotKind, string> = {
+export const MEETING_KIND_LABEL: Record<MeetingKind, string> = {
   lecture: '正課',
   discussion: '分組討論',
-  work: '作業時間',
-}
-
-/** Only these kinds turn into weekly files when the timetable is expanded. */
-export const MEETING_KINDS: SlotKind[] = ['lecture', 'discussion']
-
-export function isMeetingKind(kind: SlotKind | undefined): boolean {
-  return MEETING_KINDS.includes(kind ?? 'lecture')
 }
 
 export interface ClassSlot {
@@ -28,7 +20,31 @@ export interface ClassSlot {
   end: string // "22:00"
   room?: string
   /** Absent on slots created before kinds existed; treat those as lectures. */
-  kind?: SlotKind
+  kind?: MeetingKind
+}
+
+/**
+ * Time set aside for coursework. Never a meeting, never recorded — it exists so
+ * the assignment planner can answer "how many hours do I actually have left
+ * before this is due".
+ *
+ * Two shapes, because study time is not reliably weekly: a standing block every
+ * Sunday afternoon, or one Saturday put aside for a particular paper.
+ */
+export type Recurrence = 'weekly' | 'once'
+
+export interface WorkBlock {
+  id: string
+  courseId: string
+  repeat: Recurrence
+  /** Set when repeat is 'weekly'. */
+  weekday?: number
+  /** Set when repeat is 'once'. */
+  date?: string
+  start: string
+  end: string
+  note?: string
+  createdAt: number
 }
 
 export interface Term {
@@ -55,13 +71,9 @@ export interface Course {
   createdAt: number
 }
 
-/** A session is always a meeting; work time never becomes one. */
-export type SessionKind = 'lecture' | 'discussion'
-
-export const SESSION_KIND_LABEL: Record<SessionKind, string> = {
-  lecture: '正課',
-  discussion: '分組討論',
-}
+/** A session is always a meeting; study time never becomes one. */
+export type SessionKind = MeetingKind
+export const SESSION_KIND_LABEL = MEETING_KIND_LABEL
 
 export interface Session {
   id: string

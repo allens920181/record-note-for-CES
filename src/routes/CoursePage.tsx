@@ -3,51 +3,48 @@ import { Link, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   WEEKDAY_LABELS,
-  appendSession,
+  createSessionOn,
   db,
   deleteSessionCascade,
   generateSessionsFromTimetable,
   renumberSessions,
+  sumWorkHours,
+  todayISO,
 } from '../db'
 import type { ClassSlot } from '../db'
-import { SESSION_KIND_LABEL, SLOT_KIND_LABEL, isMeetingKind } from '../db/schema'
-import type { SessionKind, SlotKind } from '../db/schema'
+import { MEETING_KIND_LABEL, SESSION_KIND_LABEL } from '../db/schema'
+import type { MeetingKind } from '../db/schema'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { AttachmentList } from '../components/AttachmentList'
+import { WorkBlockEditor } from '../components/WorkBlockEditor'
+import { Modal } from '../components/Modal'
 
 type Tab = 'sessions' | 'setup'
 
-/** Hours in a slot, from "19:00"–"22:00". Returns 0 if either time is unparseable. */
-function slotHours(slot: ClassSlot): number {
-  const parse = (t: string) => {
-    const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim())
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null
-  }
-  const from = parse(slot.start)
-  const to = parse(slot.end)
-  if (from === null || to === null || to <= from) return 0
-  return Math.round(((to - from) / 60) * 10) / 10
-}
+const MEETING_KINDS: MeetingKind[] = ['lecture', 'discussion']
 
 export function CoursePage() {
   const { courseId = '' } = useParams()
   const [tab, setTab] = useState<Tab>('sessions')
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [adding, setAdding] = useState<MeetingKind | null>(null)
+  const [addDate, setAddDate] = useState(todayISO())
 
   const course = useLiveQuery(() => db.courses.get(courseId), [courseId])
   const term = useLiveQuery(
     async () => (course ? db.terms.get(course.termId) : undefined),
     [course?.termId],
   )
-  const sessions = useLiveQuery(
-    async () => {
-      const list = await db.sessions.where('courseId').equals(courseId).toArray()
-      // Sort by date, not by week number: a week holds several meetings and
-      // sorting on the shared number leaves their order to chance.
-      return list.sort(
-        (a, b) => a.date.localeCompare(b.date) || (a.kind ?? '').localeCompare(b.kind ?? ''),
-      )
-    },
+  const sessions = useLiveQuery(async () => {
+    const list = await db.sessions.where('courseId').equals(courseId).toArray()
+    // Sort by date, not by week number: a week holds several meetings and
+    // sorting on the shared number leaves their order to chance.
+    return list.sort(
+      (a, b) => a.date.localeCompare(b.date) || (a.kind ?? '').localeCompare(b.kind ?? ''),
+    )
+  }, [courseId])
+  const workBlocks = useLiveQuery(
+    () => db.workBlocks.where('courseId').equals(courseId).toArray(),
     [courseId],
   )
   const state = useLiveQuery(async () => {
@@ -67,10 +64,7 @@ export function CoursePage() {
     )
 
   const slots = course.slots
-  const meetingSlots = slots.filter((s) => isMeetingKind(s.kind))
-  const workSlots = slots.filter((s) => !isMeetingKind(s.kind))
-  const hasDiscussion = slots.some((s) => s.kind === 'discussion')
-  const weeklyWorkHours = workSlots.reduce((sum, s) => sum + slotHours(s), 0)
+  const hours = sumWorkHours(workBlocks ?? [], term?.weeks ?? 0)
 
   async function patchSlots(next: ClassSlot[]) {
     await db.courses.update(courseId, { slots: next })
@@ -79,21 +73,26 @@ export function CoursePage() {
   async function generate() {
     setMessage(null)
     try {
-      const { created, skipped, workSlots } = await generateSessionsFromTimetable(courseId)
+      const { created, skipped } = await generateSessionsFromTimetable(courseId)
       await renumberSessions(courseId)
-      const workNote =
-        workSlots > 0 ? `作業時間有 ${workSlots} 個時段，不會產生檔案。` : ''
       setMessage({
         kind: 'ok',
         text:
           created === 0
-            ? `整學期的週次都已經存在了，沒有新增任何一個。${workNote}`
-            : `產生了 ${created} 個週次${skipped > 0 ? `，另有 ${skipped} 個已存在而略過` : ''}。${workNote}`,
+            ? '這些時段的週次都已經存在了，沒有新增任何一個。'
+            : `產生了 ${created} 個週次${skipped > 0 ? `，另有 ${skipped} 個已存在而略過` : ''}。`,
       })
       setTab('sessions')
     } catch (err) {
       setMessage({ kind: 'err', text: err instanceof Error ? err.message : String(err) })
     }
+  }
+
+  async function confirmAdd() {
+    if (!adding) return
+    await createSessionOn(courseId, addDate, adding)
+    await renumberSessions(courseId)
+    setAdding(null)
   }
 
   return (
@@ -114,8 +113,8 @@ export function CoursePage() {
             <h1>{course.name}</h1>
             <p>
               {[course.teacher, course.code, `${course.credits} 學分`].filter(Boolean).join(' · ')}
-              {meetingSlots.length > 0 &&
-                ` · ${meetingSlots
+              {slots.length > 0 &&
+                ` · ${slots
                   .map(
                     (s) =>
                       `週${WEEKDAY_LABELS[s.weekday]} ${s.start}${
@@ -123,7 +122,7 @@ export function CoursePage() {
                       }`,
                   )
                   .join('、')}`}
-              {weeklyWorkHours > 0 && ` · 每週作業時間 ${weeklyWorkHours} 小時`}
+              {hours.total > 0 && ` · 作業時間共 ${hours.total} 小時`}
             </p>
           </div>
         </div>
@@ -136,7 +135,7 @@ export function CoursePage() {
             週次 {sessions ? `(${sessions.length})` : ''}
           </button>
           <button className={`tab${tab === 'setup' ? ' active' : ''}`} onClick={() => setTab('setup')}>
-            課表 · 詞彙表 · 檔案
+            課表 · 作業時間 · 詞彙表 · 檔案
           </button>
         </div>
 
@@ -149,27 +148,24 @@ export function CoursePage() {
         {tab === 'sessions' && (
           <>
             <div className="row" style={{ gap: '.6rem', marginBottom: '1rem' }}>
-              <button
-                className="btn primary"
-                style={{ flex: '0 0 auto' }}
-                onClick={() => appendSession(courseId, 'lecture')}
-              >
-                新增一次正課
-              </button>
-              {hasDiscussion && (
+              {MEETING_KINDS.map((k) => (
                 <button
-                  className="btn"
+                  key={k}
+                  className={`btn${k === 'lecture' ? ' primary' : ''}`}
                   style={{ flex: '0 0 auto' }}
-                  onClick={() => appendSession(courseId, 'discussion')}
+                  onClick={() => {
+                    setAddDate(sessions?.length ? todayISO() : (term?.startDate ?? todayISO()))
+                    setAdding(k)
+                  }}
                 >
-                  新增一次分組討論
+                  新增一次{MEETING_KIND_LABEL[k]}
                 </button>
-              )}
+              ))}
               <button
                 className="btn"
                 style={{ flex: '0 0 auto' }}
-                disabled={meetingSlots.length === 0}
-                title={meetingSlots.length === 0 ? '先到「課表」設定正課或分組討論的時段' : undefined}
+                disabled={slots.length === 0}
+                title={slots.length === 0 ? '先到「課表」設定每週固定的時段' : undefined}
                 onClick={generate}
               >
                 依課表產生整學期
@@ -181,8 +177,8 @@ export function CoursePage() {
             ) : sessions.length === 0 ? (
               <div className="empty">
                 <p>
-                  還沒有任何週次。設定好課表之後按「依課表產生整學期」，
-                  {term ? `${term.weeks} 週` : '整學期'}的檔案就會一次排好。
+                  還沒有任何週次。每週固定的課設好課表後按「依課表產生整學期」；
+                  只開一次的聚會用「新增一次…」挑日期。
                 </p>
               </div>
             ) : (
@@ -195,12 +191,11 @@ export function CoursePage() {
                       style={{ textDecoration: 'none', color: 'inherit' }}
                     >
                       <div className="title">
-                        第 {s.index} 週 · {SESSION_KIND_LABEL[(s.kind ?? 'lecture') as SessionKind]}
+                        第 {s.index} 週 · {SESSION_KIND_LABEL[s.kind ?? 'lecture']}
                         {s.topic ? ` · ${s.topic}` : ''}
                       </div>
                       <div className="sub mono">
-                        {s.date}
-                        {slots[0] ? ` 週${WEEKDAY_LABELS[new Date(`${s.date}T00:00:00`).getDay()]}` : ''}
+                        {s.date} 週{WEEKDAY_LABELS[new Date(`${s.date}T00:00:00`).getDay()]}
                       </div>
                     </Link>
                     {s.canceled ? (
@@ -220,7 +215,11 @@ export function CoursePage() {
                     <button
                       className="btn danger sm"
                       onClick={async () => {
-                        if (confirm(`刪除第 ${s.index} 週的${SESSION_KIND_LABEL[(s.kind ?? 'lecture') as SessionKind]}？逐字稿與筆記會一併刪除，無法復原。`)) {
+                        if (
+                          confirm(
+                            `刪除 ${s.date} 的${SESSION_KIND_LABEL[s.kind ?? 'lecture']}？逐字稿與筆記會一併刪除，無法復原。`,
+                          )
+                        ) {
                           await deleteSessionCascade(s.id)
                           await renumberSessions(courseId)
                         }
@@ -237,27 +236,24 @@ export function CoursePage() {
 
         {tab === 'setup' && (
           <>
-            {/* ── timetable ─────────────────────────────────────── */}
+            {/* ── recurring meetings ────────────────────────────── */}
             <section className="card" style={{ marginBottom: '1.25rem' }}>
-              <h2>上課時段</h2>
+              <h2>每週固定的上課時段</h2>
               <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
-                <strong>正課</strong>和<strong>分組討論</strong>各自每週開一個檔案——
+                只放<strong>每週都會發生</strong>的聚會。正課和分組討論各自每週開一個檔案——
                 兩場是分開的錄音，時間軸沒辦法合併，但同一週會共用同一個週次編號。
-                <strong>作業時間</strong>只是排進行事曆的時段，不會產生錄音檔案。
+                <br />
+                只開一次的分組討論不必寫在這裡，到「週次」用「新增一次分組討論」挑日期就好。
               </p>
 
               {slots.length === 0 ? (
-                <div className="empty" style={{ padding: '1.25rem' }}>
-                  還沒有時段。
+                <div className="empty" style={{ padding: '1.25rem', marginBottom: '.9rem' }}>
+                  還沒有固定時段。
                 </div>
               ) : (
                 <div className="stack" style={{ marginBottom: '.9rem' }}>
                   {slots.map((slot, i) => (
-                    <div
-                      key={i}
-                      className={`row slot-row${isMeetingKind(slot.kind) ? '' : ' is-work'}`}
-                      style={{ gap: '.5rem', alignItems: 'flex-end' }}
-                    >
+                    <div key={i} className="row slot-row" style={{ gap: '.5rem', alignItems: 'flex-end' }}>
                       <div className="field" style={{ flex: '0 0 8rem', marginBottom: 0 }}>
                         <label htmlFor={`kd-${i}`}>類型</label>
                         <select
@@ -266,14 +262,14 @@ export function CoursePage() {
                           onChange={(e) =>
                             patchSlots(
                               slots.map((sl, j) =>
-                                j === i ? { ...sl, kind: e.target.value as SlotKind } : sl,
+                                j === i ? { ...sl, kind: e.target.value as MeetingKind } : sl,
                               ),
                             )
                           }
                         >
-                          {(Object.keys(SLOT_KIND_LABEL) as SlotKind[]).map((k) => (
+                          {MEETING_KINDS.map((k) => (
                             <option key={k} value={k}>
-                              {SLOT_KIND_LABEL[k]}
+                              {MEETING_KIND_LABEL[k]}
                             </option>
                           ))}
                         </select>
@@ -346,7 +342,7 @@ export function CoursePage() {
               )}
 
               <div className="row" style={{ gap: '.6rem' }}>
-                {(Object.keys(SLOT_KIND_LABEL) as SlotKind[]).map((k) => (
+                {MEETING_KINDS.map((k) => (
                   <button
                     key={k}
                     className="btn"
@@ -354,35 +350,29 @@ export function CoursePage() {
                     onClick={() =>
                       patchSlots([
                         ...slots,
-                        {
-                          weekday: k === 'discussion' ? 4 : 2,
-                          start: k === 'work' ? '14:00' : '19:00',
-                          end: k === 'work' ? '17:00' : '22:00',
-                          kind: k,
-                        },
+                        { weekday: k === 'discussion' ? 4 : 2, start: '19:00', end: '22:00', kind: k },
                       ])
                     }
                   >
-                    新增{SLOT_KIND_LABEL[k]}
+                    新增每週{MEETING_KIND_LABEL[k]}
                   </button>
                 ))}
                 <button
                   className="btn primary"
                   style={{ flex: '0 0 auto' }}
-                  disabled={meetingSlots.length === 0}
+                  disabled={slots.length === 0}
                   onClick={generate}
                 >
                   依課表產生整學期
                 </button>
               </div>
-
-              {weeklyWorkHours > 0 && (
-                <p className="small muted" style={{ marginTop: '.8rem' }}>
-                  每週安排了 {weeklyWorkHours} 小時作業時間，整學期約 {Math.round(weeklyWorkHours * (term?.weeks ?? 0))} 小時。
-                  這些時段不會產生檔案；Phase 3 的作業規劃會用它們回推可用時間。
-                </p>
-              )}
             </section>
+
+            <WorkBlockEditor
+              courseId={courseId}
+              termWeeks={term?.weeks ?? 0}
+              defaultDate={term?.startDate ?? todayISO()}
+            />
 
             {/* ── glossary ──────────────────────────────────────── */}
             <section className="card" style={{ marginBottom: '1.25rem' }}>
@@ -409,7 +399,6 @@ export function CoursePage() {
               </p>
             </section>
 
-            {/* ── course-level files ────────────────────────────── */}
             <AttachmentList
               scope="course"
               ownerId={courseId}
@@ -421,6 +410,29 @@ export function CoursePage() {
           </>
         )}
       </main>
+
+      {adding && (
+        <Modal
+          title={`新增一次${MEETING_KIND_LABEL[adding]}`}
+          onClose={() => setAdding(null)}
+          onSubmit={confirmAdd}
+          submitLabel="建立"
+        >
+          <div className="field">
+            <label htmlFor="add-date">日期</label>
+            <input
+              id="add-date"
+              type="date"
+              value={addDate}
+              autoFocus
+              onChange={(e) => setAddDate(e.target.value)}
+            />
+            <div className="hint">
+              週次編號會依這個日期自動算出來，和同一週的其他聚會共用。
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }
