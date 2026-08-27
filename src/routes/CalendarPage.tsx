@@ -27,6 +27,7 @@ import { Modal } from '../components/Modal'
 import { WeekCalendar } from '../components/WeekCalendar'
 import { MonthCalendar } from '../components/MonthCalendar'
 import { TermPicker, useTermChoice } from '../components/TermPicker'
+import { TimeField } from '../components/TimeField'
 
 type View = 'week' | 'month'
 
@@ -340,24 +341,18 @@ export function CalendarPage() {
                   : '只發生在這一天'}
               </div>
             </div>
-            <div className="field">
-              <label htmlFor="d-start">開始</label>
-              <input
-                id="d-start"
-                type="text"
-                value={draft.start}
-                onChange={(e) => setDraft({ ...draft, start: e.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="d-end">結束</label>
-              <input
-                id="d-end"
-                type="text"
-                value={draft.end}
-                onChange={(e) => setDraft({ ...draft, end: e.target.value })}
-              />
-            </div>
+            <TimeField
+              id="d-start"
+              label="開始"
+              value={draft.start}
+              onChange={(v) => setDraft({ ...draft, start: v })}
+            />
+            <TimeField
+              id="d-end"
+              label="結束"
+              value={draft.end}
+              onChange={(v) => setDraft({ ...draft, end: v })}
+            />
           </div>
 
           {draft.kind === 'work' ? (

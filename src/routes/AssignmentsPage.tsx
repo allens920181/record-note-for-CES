@@ -16,6 +16,7 @@ import type { Pressure } from '../schedule/workload'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { TermPicker, useTermChoice } from '../components/TermPicker'
+import { TimeField } from '../components/TimeField'
 
 const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
   done: { cls: 'ok', label: '已完成' },
@@ -320,12 +321,11 @@ function AssignmentDetail({
         </div>
         <div className="field">
           <label htmlFor={`dt-${assignment.id}`}>截止時間</label>
-          <input
+          <TimeField
             id={`dt-${assignment.id}`}
-            type="text"
-            placeholder="23:59"
             value={assignment.dueTime ?? ''}
-            onChange={(e) => void updateAssignment(assignment.id, { dueTime: e.target.value })}
+            allowEmpty
+            onChange={(v) => void updateAssignment(assignment.id, { dueTime: v || undefined })}
           />
         </div>
       </div>

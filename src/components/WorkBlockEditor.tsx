@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { WEEKDAY_LABELS, addWorkBlock, db, deleteWorkBlock, sumWorkHours, updateWorkBlock } from '../db'
 import type { Recurrence, WorkBlock } from '../db'
 import { hoursBetween } from '../lib/time'
+import { TimeField } from './TimeField'
 
 interface Props {
   courseId: string
@@ -109,24 +110,20 @@ export function WorkBlockEditor({ courseId, termWeeks, defaultDate }: Props) {
                 </div>
               )}
 
-              <div className="field" style={{ flex: '1 1 5.5rem', marginBottom: 0 }}>
-                <label htmlFor={`ws-${block.id}`}>開始</label>
-                <input
-                  id={`ws-${block.id}`}
-                  type="text"
-                  value={block.start}
-                  onChange={(e) => patch(block, { start: e.target.value })}
-                />
-              </div>
-              <div className="field" style={{ flex: '1 1 5.5rem', marginBottom: 0 }}>
-                <label htmlFor={`we-${block.id}`}>結束</label>
-                <input
-                  id={`we-${block.id}`}
-                  type="text"
-                  value={block.end}
-                  onChange={(e) => patch(block, { end: e.target.value })}
-                />
-              </div>
+              <TimeField
+                id={`ws-${block.id}`}
+                label="開始"
+                value={block.start}
+                onChange={(v) => patch(block, { start: v })}
+                style={{ flex: '1 1 5.5rem' }}
+              />
+              <TimeField
+                id={`we-${block.id}`}
+                label="結束"
+                value={block.end}
+                onChange={(v) => patch(block, { end: v })}
+                style={{ flex: '1 1 5.5rem' }}
+              />
               <div className="field" style={{ flex: '1 1 8rem', marginBottom: 0 }}>
                 <label htmlFor={`wn-${block.id}`}>備註</label>
                 <input

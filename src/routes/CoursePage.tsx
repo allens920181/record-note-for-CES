@@ -25,6 +25,7 @@ import { ProgressOverview } from '../components/ProgressOverview'
 import { Modal } from '../components/Modal'
 import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
+import { TimeField } from '../components/TimeField'
 
 type Tab = 'sessions' | 'setup' | 'work' | 'require'
 
@@ -363,30 +364,24 @@ export function CoursePage() {
                           ))}
                         </select>
                       </div>
-                      <div className="field" style={{ flex: '1 1 6rem', marginBottom: 0 }}>
-                        <label htmlFor={`st-${i}`}>開始</label>
-                        <input
-                          id={`st-${i}`}
-                          type="text"
-                          placeholder="19:00"
-                          value={slot.start}
-                          onChange={(e) =>
-                            patchSlots(slots.map((s, j) => (j === i ? { ...s, start: e.target.value } : s)))
-                          }
-                        />
-                      </div>
-                      <div className="field" style={{ flex: '1 1 6rem', marginBottom: 0 }}>
-                        <label htmlFor={`en-${i}`}>結束</label>
-                        <input
-                          id={`en-${i}`}
-                          type="text"
-                          placeholder="22:00"
-                          value={slot.end}
-                          onChange={(e) =>
-                            patchSlots(slots.map((s, j) => (j === i ? { ...s, end: e.target.value } : s)))
-                          }
-                        />
-                      </div>
+                      <TimeField
+                        id={`st-${i}`}
+                        label="開始"
+                        value={slot.start}
+                        onChange={(v) =>
+                          patchSlots(slots.map((s, j) => (j === i ? { ...s, start: v } : s)))
+                        }
+                        style={{ flex: '1 1 6rem' }}
+                      />
+                      <TimeField
+                        id={`en-${i}`}
+                        label="結束"
+                        value={slot.end}
+                        onChange={(v) =>
+                          patchSlots(slots.map((s, j) => (j === i ? { ...s, end: v } : s)))
+                        }
+                        style={{ flex: '1 1 6rem' }}
+                      />
                       <div className="field" style={{ flex: '1 1 7rem', marginBottom: 0 }}>
                         <label htmlFor={`rm-${i}`}>教室</label>
                         <input
