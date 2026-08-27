@@ -317,3 +317,85 @@ a.list-item:hover { border-color: var(--accent); }
   flex: 0 0 auto; align-self: center; padding-top: 1.1rem;
   font-size: .78rem; color: var(--muted); white-space: nowrap;
 }
+
+/* ── calendar ────────────────────────────────────────────────────── */
+.cal-bar {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  margin-bottom: 1rem; padding-bottom: .8rem; border-bottom: 1px solid var(--line);
+}
+.cal-title-text { font-family: var(--display); font-weight: 600; font-size: 1rem; min-width: 10rem; text-align: center; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; margin-bottom: .8rem; font-size: .78rem; color: var(--muted); }
+.cal-legend-item { display: inline-flex; align-items: center; gap: .35rem; }
+.cal-swatch { width: .6rem; height: .6rem; border-radius: 2px; flex: none; }
+
+/* shared marks */
+.cal-block, .cal-chip {
+  font-family: var(--body); text-align: left; cursor: pointer;
+  border: 1px solid var(--line); border-left-width: 3px;
+  background: var(--surface); color: var(--ink);
+  overflow: hidden; display: block;
+}
+.cal-block:hover, .cal-chip:hover { filter: brightness(.97); border-color: var(--muted); }
+.cal-block.is-canceled, .cal-chip.is-canceled { opacity: .5; text-decoration: line-through; }
+.cal-block.kind-work, .cal-chip.kind-work { border-style: dashed; border-left-style: solid; background: var(--surface-2); }
+
+.cal-block {
+  position: absolute; border-radius: 5px; padding: .18rem .35rem;
+  font-size: .74rem; line-height: 1.3;
+}
+.cal-block .cal-time { display: block; color: var(--muted); font-size: .68rem; }
+.cal-block .cal-title { display: block; font-weight: 500; }
+.cal-block .cal-detail { display: block; color: var(--muted); font-size: .68rem; }
+
+.cal-chip {
+  border-radius: 4px; padding: .1rem .3rem; font-size: .7rem; line-height: 1.45;
+  width: 100%; white-space: nowrap; text-overflow: ellipsis;
+}
+
+/* week view */
+.wk { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.wk-head, .wk-allday, .wk-body { display: grid; grid-template-columns: 3.6rem repeat(7, minmax(0, 1fr)); }
+.wk-head { border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.wk-day-head { padding: .4rem .3rem; text-align: center; border-left: 1px solid var(--line); }
+.wk-day-head.is-today { background: var(--accent-wash); }
+.wk-dow { display: block; font-size: .78rem; font-weight: 500; }
+.wk-date { display: block; font-size: .7rem; color: var(--muted); }
+.wk-allday { border-bottom: 1px solid var(--line); }
+.wk-allday-cell { border-left: 1px solid var(--line); padding: .25rem; display: flex; flex-direction: column; gap: .2rem; min-height: 1.8rem; }
+.wk-gutter { padding: .3rem; }
+.wk-body { overflow-y: auto; max-height: 62vh; }
+.wk-hours { position: relative; }
+.wk-hour {
+  font-size: .68rem; color: var(--muted); text-align: right;
+  padding-right: .35rem; transform: translateY(-.45em);
+}
+.wk-col {
+  position: relative; border-left: 1px solid var(--line);
+  background-image: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 100%);
+  background-repeat: repeat-y;
+}
+.wk-col.is-today { background-color: color-mix(in srgb, var(--accent-wash) 45%, transparent); }
+
+/* month view */
+.mo { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.mo-head, .mo-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mo-head { background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.mo-dow { padding: .4rem; text-align: center; font-size: .78rem; font-weight: 500; border-left: 1px solid var(--line); }
+.mo-dow:first-child { border-left: 0; }
+.mo-cell {
+  min-height: 6.2rem; border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+  padding: .25rem; display: flex; flex-direction: column; gap: .15rem; cursor: pointer;
+}
+.mo-cell:nth-child(7n + 1) { border-left: 0; }
+.mo-cell.is-outside { background: var(--surface-2); }
+.mo-cell.is-outside .mo-num { opacity: .45; }
+.mo-cell.is-today { background: var(--accent-wash); }
+.mo-num { font-size: .72rem; color: var(--muted); }
+.mo-cell.is-today .mo-num { color: var(--accent-ink); font-weight: 500; }
+.mo-more { font-size: .68rem; color: var(--muted); padding-left: .2rem; }
+
+@media (max-width: 46rem) {
+  .wk-head, .wk-allday, .wk-body { grid-template-columns: 2.6rem repeat(7, minmax(3.4rem, 1fr)); }
+  .wk { overflow-x: auto; }
+  .mo-cell { min-height: 4.6rem; }
+}

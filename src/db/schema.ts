@@ -85,6 +85,10 @@ export interface Session {
    */
   index: number
   date: string // ISO yyyy-mm-dd
+  /** Clock times, so the calendar can place the meeting rather than guess. */
+  start?: string // "19:00"
+  end?: string // "22:00"
+  room?: string
   topic: string
   canceled: boolean
   /** Absent on sessions created before kinds existed; treat those as lectures. */

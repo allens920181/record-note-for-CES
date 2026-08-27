@@ -4,6 +4,7 @@ import { newId } from '../lib/id'
 import { deleteFile, deleteDir } from '../storage/fsRoot'
 import { DEFAULT_SETTINGS } from './schema'
 import { hoursBetween } from '../lib/time'
+import { addDays, todayISO } from '../lib/dates'
 import type {
   AppSettings,
   Attachment,
@@ -238,6 +239,9 @@ export async function generateSessionsFromTimetable(courseId: string): Promise<G
         courseId,
         index: weekNumberOf(term.startDate, date),
         date,
+        start: slot.start,
+        end: slot.end,
+        room: slot.room,
         topic: '',
         canceled: false,
         kind,
@@ -280,15 +284,22 @@ export async function createSessionOn(
   courseId: string,
   date: string,
   kind: SessionKind,
+  times?: { start?: string; end?: string; room?: string },
 ): Promise<string> {
   const course = await db.courses.get(courseId)
   const term = course ? await db.terms.get(course.termId) : undefined
+  // Fall back to how this course usually meets, so a meeting added without
+  // times still lands somewhere sensible on the calendar.
+  const usual = course?.slots.find((slot) => (slot.kind ?? 'lecture') === kind) ?? course?.slots[0]
   const id = newId('sess')
   await db.sessions.add({
     id,
     courseId,
     index: term ? weekNumberOf(term.startDate, date) : 1,
     date,
+    start: times?.start ?? usual?.start,
+    end: times?.end ?? usual?.end,
+    room: times?.room ?? usual?.room,
     topic: '',
     canceled: false,
     kind,
@@ -416,13 +427,7 @@ export async function saveNote(sessionId: string, markdown: string): Promise<voi
 }
 
 // ── dates ─────────────────────────────────────────────────────────────
+// Re-exported so existing callers keep working; the implementations live in
+// lib/dates.ts, which the calendar also draws on.
 
-export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-export function addDays(iso: string, days: number): string {
-  const d = new Date(`${iso}T00:00:00`)
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
+export { addDays, todayISO }

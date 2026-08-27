@@ -31,6 +31,9 @@ export function TopBar({ children }: { children?: ReactNode }) {
       </Link>
       {children}
       <span className="spacer" />
+      <Link to="/calendar" className="btn ghost sm">
+        行事曆
+      </Link>
       <Link to="/settings" className="btn ghost sm">
         設定
       </Link>
