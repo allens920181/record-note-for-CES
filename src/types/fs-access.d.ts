@@ -19,4 +19,9 @@ declare global {
   interface Window {
     showDirectoryPicker?(o?: DirectoryPickerOptions): Promise<FileSystemDirectoryHandle>
   }
+  interface FileSystemDirectoryHandle {
+    entries(): AsyncIterableIterator<[string, FileSystemHandle]>
+    keys(): AsyncIterableIterator<string>
+    values(): AsyncIterableIterator<FileSystemHandle>
+  }
 }

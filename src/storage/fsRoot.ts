@@ -172,3 +172,33 @@ export async function deleteFile(key: string): Promise<void> {
     // Already gone — deleting an absent file is not an error worth surfacing.
   }
 }
+
+/** Removes a directory and everything under it, e.g. a recording's parts. */
+export async function deleteDir(key: string): Promise<void> {
+  // resolveDir treats the last segment as a file name, which is what we want:
+  // the parent handle plus the directory's own name.
+  const resolved = await resolveDir(key, false)
+  if (!resolved) return
+  try {
+    await resolved.dir.removeEntry(resolved.name, { recursive: true })
+  } catch {
+    // Already gone.
+  }
+}
+
+/** Lists the file names directly inside a directory, sorted. */
+export async function listDir(key: string): Promise<string[]> {
+  const parts = key.split('/').filter(Boolean)
+  let dir: FileSystemDirectoryHandle
+  try {
+    dir = await getRoot()
+    for (const part of parts) dir = await dir.getDirectoryHandle(part)
+  } catch {
+    return []
+  }
+  const names: string[] = []
+  for await (const [name, handle] of dir.entries()) {
+    if (handle.kind === 'file') names.push(name)
+  }
+  return names.sort()
+}

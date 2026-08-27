@@ -80,6 +80,49 @@ export interface Note {
   updatedAt: number
 }
 
+export type AttachmentScope = 'course' | 'session'
+export type AttachmentKind = 'syllabus' | 'handout' | 'reading' | 'other'
+
+export const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
+  syllabus: '教學大綱',
+  handout: '講義',
+  reading: '閱讀材料',
+  other: '其他',
+}
+
+export interface Attachment {
+  id: string
+  scope: AttachmentScope
+  /** courseId when scope is 'course', sessionId when it is 'session'. */
+  ownerId: string
+  /** Denormalised so a course can list everything beneath it in one index hit. */
+  courseId: string
+  fileName: string
+  storageKey: string
+  mimeType: string
+  bytes: number
+  kind: AttachmentKind
+  /** Text pulled out of the PDF, kept for the cross-week search in Phase 3. */
+  text?: string
+  pageCount?: number
+  createdAt: number
+}
+
+/**
+ * An in-progress recording. Parts land on disk as they arrive, so a tab that
+ * crashes mid-lecture leaves a recoverable trail rather than nothing.
+ */
+export interface RecordingDraft {
+  id: string
+  sessionId: string
+  /** Directory under the storage root holding the part-NNN files. */
+  dir: string
+  parts: number
+  mimeType: string
+  startedAt: number
+  updatedAt: number
+}
+
 export type JobStatus = 'pending' | 'preparing' | 'transcribing' | 'done' | 'error'
 
 export interface TranscribeJob {

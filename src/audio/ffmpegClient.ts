@@ -34,6 +34,28 @@ let instance: FFmpeg | null = null
 let loading: Promise<FFmpeg> | null = null
 let logBuffer: string[] = []
 
+// Duration is captured as the lines stream past rather than scanned for
+// afterwards: the buffer is capped, and a three-hour transcode emits enough
+// progress lines to push the header's "Duration:" out of it.
+let probedDurationSec = 0
+let lastEncodedSec = 0
+
+function noteDuration(line: string) {
+  const dur = /Duration:\s*(\d+):(\d{2}):(\d{2})\.(\d+)/.exec(line)
+  if (dur) {
+    const [, h, m, sec, frac] = dur
+    probedDurationSec = Number(h) * 3600 + Number(m) * 60 + Number(sec) + Number(`0.${frac}`)
+    return
+  }
+  // Streaming WebM from MediaRecorder carries no duration in its header, so
+  // fall back to how far the encoder actually got.
+  const t = /\btime=\s*(\d+):(\d{2}):(\d{2})\.(\d+)/.exec(line)
+  if (t) {
+    const [, h, m, sec, frac] = t
+    lastEncodedSec = Number(h) * 3600 + Number(m) * 60 + Number(sec) + Number(`0.${frac}`)
+  }
+}
+
 function absolute(path: string): string {
   return new URL(path, location.href).href
 }
@@ -46,6 +68,7 @@ async function getFFmpeg(onProgress?: (p: PrepareProgress) => void): Promise<FFm
   loading = (async () => {
     const ff = new FFmpeg()
     ff.on('log', ({ message }) => {
+      noteDuration(message)
       logBuffer.push(message)
       // Keep the buffer bounded — a long transcode emits thousands of lines.
       if (logBuffer.length > 400) logBuffer.splice(0, logBuffer.length - 400)
@@ -75,18 +98,6 @@ async function getFFmpeg(onProgress?: (p: PrepareProgress) => void): Promise<FFm
       `音訊處理引擎載入失敗：${err instanceof Error ? err.message : String(err)}。請重新整理再試一次。`,
     )
   }
-}
-
-/** Pulls "Duration: 01:23:45.67" out of ffmpeg's log output. */
-function parseDurationFromLog(lines: string[]): number {
-  for (const line of lines) {
-    const m = /Duration:\s*(\d+):(\d{2}):(\d{2})\.(\d+)/.exec(line)
-    if (m) {
-      const [, h, mm, ss, frac] = m
-      return Number(h) * 3600 + Number(mm) * 60 + Number(ss) + Number(`0.${frac}`)
-    }
-  }
-  return 0
 }
 
 function extensionOf(name: string): string {
@@ -122,6 +133,8 @@ export async function prepareChunks(
 ): Promise<PrepareResult> {
   const ff = await getFFmpeg(onProgress)
   logBuffer = []
+  probedDurationSec = 0
+  lastEncodedSec = 0
 
   const inputName = `input.${extensionOf(file.name)}`
   const pattern = 'chunk%04d.ogg'
@@ -153,7 +166,7 @@ export async function prepareChunks(
     if (encodeCode !== 0) throw failure(`音訊轉檔失敗（代碼 ${encodeCode}）。`)
     written.push(FULL)
 
-    const durationSec = parseDurationFromLog(logBuffer)
+    const durationSec = probedDurationSec || lastEncodedSec
     const playback = toBlob(await ff.readFile(FULL), 'audio/ogg')
 
     // Pass 2 — cut the encoded file into pieces without re-encoding.

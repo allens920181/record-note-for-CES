@@ -3,14 +3,15 @@ import { Link, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, saveNote } from '../db'
 import type { TranscriptSegment } from '../db/schema'
-import { readFile } from '../storage/fsRoot'
-import { rootStatus } from '../storage/fsRoot'
+import { readFile, rootStatus } from '../storage/fsRoot'
 import { runTranscription } from '../stt/transcribe'
 import type { RunProgress } from '../stt/transcribe'
 import { formatBytes, formatDuration, formatTime } from '../lib/time'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { NoteEditor } from '../components/NoteEditor'
 import type { NoteEditorHandle } from '../components/NoteEditor'
+import { RecorderPanel } from '../components/RecorderPanel'
+import { AttachmentList } from '../components/AttachmentList'
 
 /** Index of the last segment that has started by time `t`. */
 function findActive(segments: TranscriptSegment[], t: number): number {
@@ -56,6 +57,7 @@ export function SessionPage() {
   const [currentTime, setCurrentTime] = useState(0)
   const [follow, setFollow] = useState(true)
   const [editingTranscript, setEditingTranscript] = useState(false)
+  const [glossaryNote, setGlossaryNote] = useState<string | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<RunProgress | null>(null)
@@ -103,7 +105,6 @@ export function SessionPage() {
     [segments, currentTime],
   )
 
-  // Keep the playing line in view, unless the reader turned following off.
   useEffect(() => {
     if (!follow || activeIndex < 0 || !listRef.current) return
     const el = listRef.current.querySelector<HTMLElement>(`[data-seg="${activeIndex}"]`)
@@ -124,7 +125,6 @@ export function SessionPage() {
     editorRef.current?.insertTimestamp(audioRef.current?.currentTime ?? 0)
   }, [])
 
-  // Debounced note autosave — typing shouldn't hit the database on every key.
   const noteTimer = useRef<number | null>(null)
   const onNoteChange = useCallback(
     (value: string) => {
@@ -140,30 +140,59 @@ export function SessionPage() {
     [],
   )
 
-  async function handleFile(file: File) {
-    setError(null)
-    setBusy(true)
-    setProgress({ stage: '準備中', done: 0, total: 0 })
-    const controller = new AbortController()
-    abortRef.current = controller
-    try {
-      await runTranscription(sessionId, file, setProgress, controller.signal)
-    } catch (err) {
-      if (!(err instanceof DOMException && err.name === 'AbortError')) {
-        setError(err instanceof Error ? err.message : String(err))
+  const handleFile = useCallback(
+    async (file: File) => {
+      setError(null)
+      setBusy(true)
+      setProgress({ stage: '準備中', done: 0, total: 0 })
+      const controller = new AbortController()
+      abortRef.current = controller
+      try {
+        await runTranscription(sessionId, file, setProgress, controller.signal)
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      } finally {
+        setBusy(false)
+        setProgress(null)
+        abortRef.current = null
       }
-    } finally {
-      setBusy(false)
-      setProgress(null)
-      abortRef.current = null
-    }
-  }
+    },
+    [sessionId],
+  )
 
   async function updateSegment(index: number, text: string) {
     if (!transcript) return
     const next = transcript.segments.map((s, i) => (i === index ? { ...s, text } : s))
     await db.transcripts.update(transcript.id, { segments: next, updatedAt: Date.now() })
   }
+
+  /** Adds whatever is selected in the transcript to this course's glossary. */
+  async function addSelectionToGlossary() {
+    if (!course) return
+    const term = window.getSelection()?.toString().trim() ?? ''
+    if (!term) {
+      setGlossaryNote('請先在左邊的逐字稿選取要加入的字。')
+      return
+    }
+    if (term.length > 40) {
+      setGlossaryNote('選取的內容太長了，詞彙表放的是名詞而不是句子。')
+      return
+    }
+    if (course.glossary.includes(term)) {
+      setGlossaryNote(`「${term}」已經在詞彙表裡了。`)
+      return
+    }
+    await db.courses.update(course.id, { glossary: [...course.glossary, term] })
+    setGlossaryNote(`已把「${term}」加入詞彙表，下次轉錄就會用上。`)
+  }
+
+  useEffect(() => {
+    if (!glossaryNote) return
+    const t = window.setTimeout(() => setGlossaryNote(null), 4000)
+    return () => window.clearTimeout(t)
+  }, [glossaryNote])
 
   if (session === undefined) return <div className="page">載入中…</div>
   if (session === null)
@@ -191,8 +220,7 @@ export function SessionPage() {
         <div className="ws-head">
           <div className="grow" style={{ minWidth: '12rem' }}>
             <div className="ws-title">
-              第 {session.index} 週
-              {session.topic ? ` · ${session.topic}` : ''}
+              第 {session.index} 週{session.topic ? ` · ${session.topic}` : ''}
             </div>
             <div className="ws-sub mono">{session.date}</div>
           </div>
@@ -210,12 +238,13 @@ export function SessionPage() {
           )}
         </div>
 
-        {/* ── before there's a transcript: the upload path ────────── */}
+        {/* ── before there's a transcript: record or upload ───────── */}
         {!hasTranscript && (
           <div className="page" style={{ paddingTop: '1.5rem' }}>
             {storageReady === false && (
               <div className="notice warn" style={{ marginBottom: '1rem' }}>
-                還沒設定儲存位置，轉錄無法開始。請先到 <Link to="/settings">設定</Link> 指定一個本機資料夾。
+                還沒設定儲存位置，錄音與轉錄都無法開始。請先到 <Link to="/settings">設定</Link>{' '}
+                指定一個本機資料夾。
               </div>
             )}
 
@@ -249,42 +278,63 @@ export function SessionPage() {
                 </button>
               </div>
             ) : (
-              <label
-                className={`dropzone${dragOver ? ' over' : ''}`}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setDragOver(true)
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  setDragOver(false)
-                  const file = e.dataTransfer.files[0]
-                  if (file) void handleFile(file)
-                }}
-              >
-                <input
-                  type="file"
-                  accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
-                  style={{ display: 'none' }}
+              <div className="intake">
+                <RecorderPanel
+                  sessionId={sessionId}
                   disabled={storageReady === false}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) void handleFile(file)
-                    e.target.value = ''
-                  }}
+                  onFinished={(file) => void handleFile(file)}
                 />
-                <strong>把這週的錄音拖進來，或點一下選檔案</strong>
-                <div style={{ marginTop: '.4rem' }}>
-                  支援 mp3 / m4a / wav / ogg / webm / mp4。三小時的課大約要跑十幾分鐘。
-                </div>
-              </label>
+
+                <label
+                  className={`dropzone${dragOver ? ' over' : ''}`}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setDragOver(true)
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setDragOver(false)
+                    const file = e.dataTransfer.files[0]
+                    if (file) void handleFile(file)
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
+                    style={{ display: 'none' }}
+                    disabled={storageReady === false}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) void handleFile(file)
+                      e.target.value = ''
+                    }}
+                  />
+                  <strong>或上傳已經錄好的檔案</strong>
+                  <div style={{ marginTop: '.4rem' }}>
+                    拖進來，或點一下選檔案。支援 mp3 / m4a / wav / ogg / webm / mp4。
+                  </div>
+                </label>
+              </div>
             )}
 
             {error && (
               <div className="notice err" style={{ marginTop: '1rem' }}>
-                <strong>轉錄失敗</strong>
+                <strong>失敗</strong>
                 <pre>{error}</pre>
+              </div>
+            )}
+
+            {course && (
+              <div style={{ marginTop: '1.5rem' }}>
+                <AttachmentList
+                  scope="session"
+                  ownerId={sessionId}
+                  courseId={course.id}
+                  kinds={['handout', 'reading', 'other']}
+                  title="這週的講義"
+                  hint="老師這週發的投影片或補充資料。PDF 可以直接在這裡讀。"
+                />
               </div>
             )}
           </div>
@@ -298,6 +348,14 @@ export function SessionPage() {
                 <span className="grow">逐字稿 · {segments.length} 段</span>
                 <button
                   className="btn ghost sm"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => void addSelectionToGlossary()}
+                  title="把選取的專有名詞加入這門課的詞彙表"
+                >
+                  選取加入詞彙表
+                </button>
+                <button
+                  className="btn ghost sm"
                   onClick={() => setFollow((f) => !f)}
                   title="播放時自動捲到目前這一句"
                 >
@@ -307,6 +365,8 @@ export function SessionPage() {
                   {editingTranscript ? '完成編輯' : '修正錯字'}
                 </button>
               </div>
+
+              {glossaryNote && <div className="pane-flash">{glossaryNote}</div>}
 
               <div className="pane-body" ref={listRef}>
                 <div className="tx-list">

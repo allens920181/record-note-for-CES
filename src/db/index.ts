@@ -1,19 +1,35 @@
 import Dexie from 'dexie'
 import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
+import { deleteFile, deleteDir } from '../storage/fsRoot'
 import { DEFAULT_SETTINGS } from './schema'
 import type {
   AppSettings,
+  Attachment,
+  ClassSlot,
   Course,
   Note,
   Recording,
+  RecordingDraft,
   Session,
   Term,
   Transcript,
   TranscribeJob,
 } from './schema'
 
-export type { AppSettings, Course, Note, Recording, Session, Term, Transcript, TranscribeJob }
+export type {
+  AppSettings,
+  Attachment,
+  ClassSlot,
+  Course,
+  Note,
+  Recording,
+  RecordingDraft,
+  Session,
+  Term,
+  Transcript,
+  TranscribeJob,
+}
 
 class NotesDB extends Dexie {
   terms!: EntityTable<Term, 'id'>
@@ -24,6 +40,8 @@ class NotesDB extends Dexie {
   notes!: EntityTable<Note, 'id'>
   jobs!: EntityTable<TranscribeJob, 'id'>
   settings!: EntityTable<AppSettings, 'id'>
+  attachments!: EntityTable<Attachment, 'id'>
+  drafts!: EntityTable<RecordingDraft, 'id'>
 
   constructor() {
     super('record-note-for-ces')
@@ -36,6 +54,11 @@ class NotesDB extends Dexie {
       notes: 'id, sessionId',
       jobs: 'id, recordingId, sessionId, status',
       settings: 'id',
+    })
+    // Later versions list only what changed; Dexie carries the rest forward.
+    this.version(2).stores({
+      attachments: 'id, scope, ownerId, courseId, createdAt',
+      drafts: 'id, sessionId, updatedAt',
     })
   }
 }
@@ -94,6 +117,9 @@ export async function createCourse(input: {
 export async function deleteCourseCascade(courseId: string): Promise<void> {
   const sessions = await db.sessions.where('courseId').equals(courseId).toArray()
   await Promise.all(sessions.map((s) => deleteSessionCascade(s.id)))
+  const courseFiles = await db.attachments.where('courseId').equals(courseId).toArray()
+  await Promise.all(courseFiles.map((a) => deleteFile(a.storageKey)))
+  await db.attachments.where('courseId').equals(courseId).delete()
   await db.courses.delete(courseId)
 }
 
@@ -122,7 +148,90 @@ export async function appendSession(courseId: string): Promise<string> {
   return id
 }
 
+export const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'] as const
+
+/** The first date on or after `iso` that falls on the given weekday. */
+export function nextWeekdayOnOrAfter(iso: string, weekday: number): string {
+  const d = new Date(`${iso}T00:00:00`)
+  const shift = (weekday - d.getDay() + 7) % 7
+  d.setDate(d.getDate() + shift)
+  return d.toISOString().slice(0, 10)
+}
+
+export interface GenerateResult {
+  created: number
+  skipped: number
+}
+
+/**
+ * Fills a course with one session per teaching week, dated from its timetable.
+ *
+ * One session per week rather than per meeting: the whole point of the weekly
+ * file is that a week's material lives in one place. A course that meets twice
+ * a week can still get a second file from "新增週次".
+ *
+ * Weeks that already have a session on the same date are left alone, so this is
+ * safe to run again after adding a slot or extending the term.
+ */
+export async function generateSessionsFromTimetable(courseId: string): Promise<GenerateResult> {
+  const course = await db.courses.get(courseId)
+  if (!course) throw new Error('找不到這門課')
+  if (course.slots.length === 0) throw new Error('這門課還沒設定上課時段')
+  const term = await db.terms.get(course.termId)
+  if (!term) throw new Error('找不到這門課所屬的學期')
+
+  // Anchor on the earliest weekday in the week so dates run in teaching order.
+  const weekday = [...course.slots].sort((a, b) => a.weekday - b.weekday)[0].weekday
+  const firstDate = nextWeekdayOnOrAfter(term.startDate, weekday)
+
+  const existing = await db.sessions.where('courseId').equals(courseId).toArray()
+  const takenDates = new Set(existing.map((s) => s.date))
+  let nextIndex = existing.reduce((max, s) => Math.max(max, s.index), 0)
+
+  const rows: Session[] = []
+  for (let week = 0; week < term.weeks; week++) {
+    const date = addDays(firstDate, week * 7)
+    if (takenDates.has(date)) continue
+    rows.push({
+      id: newId('sess'),
+      courseId,
+      index: ++nextIndex,
+      date,
+      topic: '',
+      canceled: false,
+      createdAt: Date.now(),
+    })
+  }
+
+  if (rows.length > 0) await db.sessions.bulkAdd(rows)
+  return { created: rows.length, skipped: term.weeks - rows.length }
+}
+
+/** Renumbers a course's sessions by date so "第 N 週" stays in teaching order. */
+export async function renumberSessions(courseId: string): Promise<void> {
+  const sessions = await db.sessions.where('courseId').equals(courseId).toArray()
+  sessions.sort((a, b) => a.date.localeCompare(b.date))
+  await Promise.all(
+    sessions.map((s, i) => (s.index === i + 1 ? undefined : db.sessions.update(s.id, { index: i + 1 }))),
+  )
+}
+
 export async function deleteSessionCascade(sessionId: string): Promise<void> {
+  // Drop the bytes on disk first; a row without its file is recoverable noise,
+  // a file without its row is invisible and never gets cleaned up.
+  const [attachments, recordings, drafts] = await Promise.all([
+    db.attachments.where({ scope: 'session', ownerId: sessionId }).toArray(),
+    db.recordings.where('sessionId').equals(sessionId).toArray(),
+    db.drafts.where('sessionId').equals(sessionId).toArray(),
+  ])
+  await Promise.all([
+    ...attachments.map((a) => deleteFile(a.storageKey)),
+    ...recordings.map((r) => deleteFile(r.storageKey)),
+    ...drafts.map((d) => deleteDir(d.dir)),
+  ])
+
+  await db.attachments.where({ scope: 'session', ownerId: sessionId }).delete()
+  await db.drafts.where('sessionId').equals(sessionId).delete()
   await db.transcripts.where('sessionId').equals(sessionId).delete()
   await db.recordings.where('sessionId').equals(sessionId).delete()
   await db.jobs.where('sessionId').equals(sessionId).delete()

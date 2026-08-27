@@ -248,3 +248,62 @@ a.list-item:hover { border-color: var(--accent); }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .small { font-size: .8rem; }
+
+/* ── tabs ────────────────────────────────────────────────────────── */
+.tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--line); margin-bottom: 1.25rem; }
+.tab {
+  font-family: var(--body); font-size: .88rem; font-weight: 500;
+  padding: .5rem .85rem; border: 0; background: transparent; color: var(--muted);
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab:hover { color: var(--ink); }
+.tab.active { color: var(--accent-ink); border-bottom-color: var(--accent); }
+
+/* ── intake: record on one side, upload on the other ─────────────── */
+.intake { display: grid; gap: 1rem; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 52rem) { .intake { grid-template-columns: 1.2fr 1fr; } }
+.intake .dropzone { padding: 2rem 1.5rem; }
+
+/* ── live recording ──────────────────────────────────────────────── */
+.rec-live {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  padding: .7rem .9rem; border-radius: var(--radius);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.rec-dot { width: .6rem; height: .6rem; border-radius: 50%; background: var(--line-strong); flex: none; }
+.rec-dot.on { background: var(--danger); animation: rec-pulse 1.4s ease-in-out infinite; }
+@keyframes rec-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
+.rec-clock { font-size: 1.35rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.rec-meter {
+  flex: 1 1 8rem; min-width: 5rem; height: 6px; border-radius: 999px;
+  background: var(--line); overflow: hidden;
+}
+.rec-meter > div { height: 100%; background: var(--accent); transition: width .08s linear; }
+@media (prefers-reduced-motion: reduce) {
+  .rec-dot.on { animation: none }
+  .rec-meter > div { transition: none }
+}
+
+/* ── transient pane message ──────────────────────────────────────── */
+.pane-flash {
+  padding: .45rem .9rem; font-size: .82rem;
+  background: var(--accent-wash); color: var(--accent-ink);
+  border-bottom: 1px solid var(--accent);
+}
+
+/* ── pdf viewer ──────────────────────────────────────────────────── */
+.pdf-shell {
+  background: var(--surface); border-radius: 10px; border: 1px solid var(--line);
+  width: min(64rem, 100%); height: min(92vh, 100%);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .5);
+}
+.pdf-bar {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .6rem .9rem; border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+.pdf-body {
+  flex: 1; overflow: auto; padding: 1rem; background: var(--ground);
+  display: flex; justify-content: center; align-items: flex-start;
+}
+.pdf-canvas { background: #fff; box-shadow: var(--shadow); max-width: 100%; }
