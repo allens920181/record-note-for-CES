@@ -2,15 +2,17 @@ import Dexie from 'dexie'
 import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
 import { deleteDir, deleteFile } from '../storage/fsRoot'
-import { DEFAULT_SETTINGS } from './schema'
+import { DEFAULT_SETTINGS, FREE_TIER } from './schema'
 import { hoursBetween } from '../lib/time'
 import { addDays, todayISO } from '../lib/dates'
+import { correctionKey, diffOnce, isMeaningful, suggestFrom } from '../schedule/corrections'
 import type {
   AppSettings,
   Assignment,
   AssignmentStatus,
   Attachment,
   ClassSlot,
+  Correction,
   Course,
   MeetingKind,
   Note,
@@ -24,6 +26,7 @@ import type {
   Term,
   TranscribeJob,
   Transcript,
+  UsageEntry,
   WorkBlock,
 } from './schema'
 
@@ -33,6 +36,7 @@ export type {
   AssignmentStatus,
   Attachment,
   ClassSlot,
+  Correction,
   Course,
   MeetingKind,
   Note,
@@ -46,6 +50,7 @@ export type {
   Term,
   TranscribeJob,
   Transcript,
+  UsageEntry,
   WorkBlock,
 }
 
@@ -63,6 +68,8 @@ class NotesDB extends Dexie {
   workBlocks!: EntityTable<WorkBlock, 'id'>
   assignments!: EntityTable<Assignment, 'id'>
   readings!: EntityTable<Reading, 'id'>
+  corrections!: EntityTable<Correction, 'id'>
+  usage!: EntityTable<UsageEntry, 'id'>
 
   constructor() {
     super('record-note-for-ces')
@@ -89,6 +96,10 @@ class NotesDB extends Dexie {
     this.version(4).stores({
       assignments: 'id, courseId, due, status',
       readings: 'id, courseId, sessionId, status',
+    })
+    this.version(5).stores({
+      corrections: 'id, courseId, sessionId, key, createdAt',
+      usage: 'id, at',
     })
   }
 }
@@ -149,6 +160,7 @@ export async function deleteCourseCascade(courseId: string): Promise<void> {
   await Promise.all(sessions.map((s) => deleteSessionCascade(s.id)))
   await db.workBlocks.where('courseId').equals(courseId).delete()
   await db.assignments.where('courseId').equals(courseId).delete()
+  await db.corrections.where('courseId').equals(courseId).delete()
   await db.readings.where('courseId').equals(courseId).delete()
   const courseFiles = await db.attachments.where('courseId').equals(courseId).toArray()
   await Promise.all(courseFiles.map((a) => deleteFile(a.storageKey)))
@@ -322,6 +334,107 @@ export async function createSessionOn(
     createdAt: Date.now(),
   })
   return id
+}
+
+// ── corrections → glossary ────────────────────────────────────────────
+
+/**
+ * Records a transcript fix and, when the term can be trusted, adds it to the
+ * course glossary straight away.
+ *
+ * Latin words are extracted reliably, so a repeated fix is added without
+ * asking — the reader has now made the same correction twice, which is as
+ * strong a signal as this gets. Chinese fixes are only recorded; picking the
+ * term needs a human, and a wrong entry would teach the model a wrong spelling.
+ */
+export interface CorrectionOutcome {
+  /** False for a punctuation or whitespace tidy-up, which teaches nothing. */
+  recorded: boolean
+  /** Set when this fix has now been made twice and the term was added. */
+  learned?: string
+}
+
+export async function recordCorrection(input: {
+  courseId: string
+  sessionId: string
+  before: string
+  after: string
+}): Promise<CorrectionOutcome> {
+  const diff = diffOnce(input.before, input.after)
+  if (!diff || !isMeaningful(diff)) return { recorded: false }
+
+  const key = correctionKey(diff)
+  const suggestion = suggestFrom(input.after, diff)
+  const id = newId('cor')
+  await db.corrections.add({ ...input, id, key, createdAt: Date.now() })
+
+  if (!suggestion?.term) return { recorded: true }
+
+  const priorSameFix = await db.corrections
+    .where('key')
+    .equals(key)
+    .filter((c) => c.courseId === input.courseId && c.id !== id)
+    .count()
+  if (priorSameFix === 0) return { recorded: true }
+
+  const course = await db.courses.get(input.courseId)
+  if (!course || course.glossary.includes(suggestion.term)) return { recorded: true }
+  await db.courses.update(input.courseId, {
+    glossary: [...course.glossary, suggestion.term],
+  })
+  await db.corrections.update(id, { resolvedTerm: suggestion.term })
+  return { recorded: true, learned: suggestion.term }
+}
+
+export async function resolveCorrection(id: string, term: string): Promise<void> {
+  const correction = await db.corrections.get(id)
+  if (!correction) return
+  const course = await db.courses.get(correction.courseId)
+  if (course && !course.glossary.includes(term)) {
+    await db.courses.update(course.id, { glossary: [...course.glossary, term] })
+  }
+  await db.corrections.update(id, { resolvedTerm: term })
+}
+
+export async function dismissCorrection(id: string): Promise<void> {
+  await db.corrections.update(id, { dismissed: true })
+}
+
+// ── usage ─────────────────────────────────────────────────────────────
+
+export async function recordUsage(seconds: number, model: string, ok: boolean): Promise<void> {
+  await db.usage.add({ id: newId('use'), at: Date.now(), seconds, model, ok })
+}
+
+export interface QuotaState {
+  /** Seconds of audio already sent in the trailing 24 hours / 1 hour. */
+  usedToday: number
+  usedThisHour: number
+  remainingToday: number
+  remainingThisHour: number
+  requestsToday: number
+}
+
+/**
+ * How much of the free tier is left. Measured over trailing windows rather than
+ * calendar days, which is the safe reading when the reset time is unknown.
+ */
+export async function quotaState(now = Date.now()): Promise<QuotaState> {
+  const dayAgo = now - 86_400_000
+  const hourAgo = now - 3_600_000
+  const recent = await db.usage.where('at').above(dayAgo).toArray()
+  const okRecent = recent.filter((u) => u.ok)
+  const usedToday = okRecent.reduce((sum, u) => sum + u.seconds, 0)
+  const usedThisHour = okRecent
+    .filter((u) => u.at > hourAgo)
+    .reduce((sum, u) => sum + u.seconds, 0)
+  return {
+    usedToday,
+    usedThisHour,
+    remainingToday: Math.max(0, FREE_TIER.secondsPerDay - usedToday),
+    remainingThisHour: Math.max(0, FREE_TIER.secondsPerHour - usedThisHour),
+    requestsToday: recent.length,
+  }
 }
 
 // ── assignments ───────────────────────────────────────────────────────

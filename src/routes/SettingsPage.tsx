@@ -14,6 +14,8 @@ import {
 import type { RootStatus } from '../storage/fsRoot'
 import { testConnection } from '../stt/groq'
 import { Breadcrumbs, TopBar } from '../components/Layout'
+import { QuotaPanel } from '../components/QuotaPanel'
+import { ExportPanel } from '../components/ExportPanel'
 
 type Msg = { kind: 'ok' | 'err' | 'warn'; text: string } | null
 
@@ -313,6 +315,8 @@ export function SettingsPage() {
             </div>
           )}
         </section>
+        <QuotaPanel />
+        <ExportPanel />
       </main>
     </>
   )

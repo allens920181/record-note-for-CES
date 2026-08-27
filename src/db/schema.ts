@@ -246,6 +246,40 @@ export interface Reading {
   createdAt: number
 }
 
+/** One fix the reader made to a transcript line, kept so it can teach the glossary. */
+export interface Correction {
+  id: string
+  courseId: string
+  sessionId: string
+  before: string
+  after: string
+  /** "聞→文" — identical fixes made twice are strong evidence of a real term. */
+  key: string
+  /** The term taken from this fix, once one has been chosen or inferred. */
+  resolvedTerm?: string
+  /** Set when the reader decided this fix carries no vocabulary. */
+  dismissed?: boolean
+  createdAt: number
+}
+
+/** One transcription request, for tracking usage against the free tier. */
+export interface UsageEntry {
+  id: string
+  at: number
+  /** Seconds of audio sent in this request. */
+  seconds: number
+  model: string
+  ok: boolean
+}
+
+/** Groq's free tier, which is what the app targets by default. */
+export const FREE_TIER = {
+  secondsPerDay: 28_800,
+  secondsPerHour: 7_200,
+  requestsPerDay: 2_000,
+  requestsPerMinute: 20,
+}
+
 export type JobStatus = 'pending' | 'preparing' | 'transcribing' | 'done' | 'error'
 
 export interface TranscribeJob {

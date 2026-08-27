@@ -428,3 +428,11 @@ a.list-item:hover { border-color: var(--accent); }
   background: var(--accent-wash); color: var(--accent-ink);
   padding: 0 .12em; border-radius: 2px; font-weight: 500;
 }
+
+/* ── transcript corrections ──────────────────────────────────────── */
+.correction {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: .8rem 1rem; background: var(--surface);
+}
+.cor-before { text-decoration: line-through; color: var(--danger); }
+.cor-context { font-size: .92rem; line-height: 1.7; margin-top: .2rem; }

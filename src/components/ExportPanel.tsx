@@ -1,0 +1,122 @@
+import { useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '../db'
+import { pickExportFolder } from '../storage/fsRoot'
+import { exportTermMarkdown } from '../export/markdown'
+import { backupBlob, backupFileName, buildBackup, downloadBlob, restoreBackup } from '../export/backup'
+
+type Msg = { kind: 'ok' | 'err'; text: string } | null
+
+export function ExportPanel() {
+  const terms = useLiveQuery(() => db.terms.orderBy('createdAt').reverse().toArray(), [])
+  const [termId, setTermId] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState<Msg>(null)
+
+  const activeTermId = termId || terms?.[0]?.id || ''
+
+  async function guard(label: string, run: () => Promise<string>) {
+    setBusy(label)
+    setMsg(null)
+    try {
+      setMsg({ kind: 'ok', text: await run() })
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <section className="card" style={{ marginBottom: '1.25rem' }}>
+      <h2>匯出與備份</h2>
+      <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
+        <strong>Markdown</strong> 會把一個學期寫成資料夾樹——指向你的 Obsidian vault，筆記就直接在那裡了。
+        <br />
+        <strong>備份</strong>是一個 JSON 檔，含結構、逐字稿與筆記。
+        音檔本來就在你選的資料夾裡，那就是它自己的備份，不重複打包。
+      </p>
+
+      <div className="row" style={{ gap: '.6rem', alignItems: 'flex-end' }}>
+        <div className="field" style={{ flex: '0 0 14rem', marginBottom: 0 }}>
+          <label htmlFor="ex-term">要匯出的學期</label>
+          <select id="ex-term" value={activeTermId} onChange={(e) => setTermId(e.target.value)}>
+            {(terms ?? []).map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          className="btn primary"
+          style={{ flex: '0 0 auto' }}
+          disabled={!activeTermId || busy !== null}
+          onClick={() =>
+            guard('markdown', async () => {
+              const root = await pickExportFolder()
+              if (!root) throw new DOMException('已取消', 'AbortError')
+              const { files } = await exportTermMarkdown(root, activeTermId, () => {})
+              return `已寫入 ${files} 個 Markdown 檔。`
+            })
+          }
+        >
+          {busy === 'markdown' ? '匯出中…' : '匯出 Markdown 到資料夾'}
+        </button>
+      </div>
+
+      <div className="row" style={{ gap: '.6rem', marginTop: '1rem' }}>
+        <button
+          className="btn"
+          style={{ flex: '0 0 auto' }}
+          disabled={busy !== null}
+          onClick={() =>
+            guard('backup', async () => {
+              const backup = await buildBackup()
+              downloadBlob(backupBlob(backup), backupFileName())
+              const rows = Object.values(backup.tables).reduce((s, t) => s + t.length, 0)
+              return `已下載備份，共 ${rows} 筆資料。`
+            })
+          }
+        >
+          {busy === 'backup' ? '準備中…' : '下載備份檔'}
+        </button>
+
+        <label className="btn" style={{ flex: '0 0 auto' }}>
+          {busy === 'restore' ? '還原中…' : '從備份還原'}
+          <input
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            disabled={busy !== null}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (!file) return
+              if (
+                !confirm(
+                  '從備份還原會清空目前的學期、課程、逐字稿與筆記，改成備份裡的內容。\n' +
+                    '這個動作無法復原。要繼續嗎？',
+                )
+              ) {
+                return
+              }
+              void guard('restore', async () => {
+                const { restored } = await restoreBackup(file)
+                const rows = Object.values(restored).reduce((s, n) => s + n, 0)
+                return `已還原 ${rows} 筆資料。`
+              })
+            }}
+          />
+        </label>
+      </div>
+
+      {msg && (
+        <div className={`notice ${msg.kind}`} style={{ marginTop: '.9rem' }}>
+          {msg.text}
+        </div>
+      )}
+    </section>
+  )
+}

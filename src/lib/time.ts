@@ -40,6 +40,21 @@ export function formatDuration(sec: number): string {
   return h > 0 ? `${h} 小時 ${m} 分` : `${m} 分`
 }
 
+/**
+ * Durations for the quota meter, where the last minute is the one that matters.
+ * `formatDuration` rounds to the nearest minute and renders zero as "—", so 40
+ * seconds of headroom reads as a comfortable "1 分" and none left reads as
+ * unknown. Here everything rounds down, so the number never promises more room
+ * than there is.
+ */
+export function formatQuota(sec: number): string {
+  const whole = Math.max(0, Math.floor(sec))
+  if (whole < 60) return `${whole} 秒`
+  const h = Math.floor(whole / 3600)
+  const m = Math.floor((whole % 3600) / 60)
+  return h > 0 ? `${h} 小時 ${m} 分` : `${m} 分`
+}
+
 /** Hours between two "HH:MM" times. 0 when either is unparseable or reversed. */
 export function hoursBetween(start: string, end: string): number {
   const parse = (t: string) => {

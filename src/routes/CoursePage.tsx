@@ -18,6 +18,7 @@ import { Breadcrumbs, TopBar } from '../components/Layout'
 import { AttachmentList } from '../components/AttachmentList'
 import { WorkBlockEditor } from '../components/WorkBlockEditor'
 import { ReadingList } from '../components/ReadingList'
+import { CorrectionsPanel } from '../components/CorrectionsPanel'
 import { Modal } from '../components/Modal'
 
 type Tab = 'sessions' | 'setup' | 'work'
@@ -388,6 +389,10 @@ export function CoursePage() {
               <textarea
                 rows={4}
                 placeholder="加爾文、巴特、士來馬赫、預定論、釋經學、稱義、成聖、logos、chesed"
+                // Uncontrolled so typing is never interrupted, but keyed on the
+                // saved list so a term added from the corrections panel below
+                // actually appears here instead of silently disagreeing with it.
+                key={course.glossary.join('、')}
                 defaultValue={course.glossary.join('、')}
                 onBlur={(e) =>
                   db.courses.update(courseId, {
@@ -402,6 +407,8 @@ export function CoursePage() {
                 用頓號或換行分隔。離開輸入框就會存檔。
               </p>
             </section>
+
+            <CorrectionsPanel courseId={courseId} />
 
             <AttachmentList
               scope="course"

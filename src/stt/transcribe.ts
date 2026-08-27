@@ -1,4 +1,4 @@
-import { db, getSettings } from '../db'
+import { db, getSettings, quotaState, recordUsage } from '../db'
 import type { Course, TranscriptSegment } from '../db/schema'
 import { newId } from '../lib/id'
 import { prepareChunks } from '../audio/ffmpegClient'
@@ -64,6 +64,13 @@ export interface RunProgress {
   total: number
 }
 
+export interface QuotaWarning {
+  /** Seconds of audio this job will send. */
+  needSeconds: number
+  remainingTodaySeconds: number
+  remainingThisHourSeconds: number
+}
+
 /**
  * Full path from an uploaded file to a stored transcript: encode, cut,
  * transcribe each piece in turn, then stitch the timings back together.
@@ -77,6 +84,8 @@ export async function runTranscription(
   file: File,
   onProgress: (p: RunProgress) => void,
   signal?: AbortSignal,
+  /** Asked once, after the length is known, if this job would exceed the free tier. */
+  confirmOverQuota?: (w: QuotaWarning) => Promise<boolean>,
 ): Promise<string> {
   const settings = await getSettings()
   if (!settings.sttApiKey) {
@@ -126,6 +135,20 @@ export async function runTranscription(
     )
     if (signal?.aborted) throw new DOMException('已取消', 'AbortError')
 
+    // ── 1b. warn before running into the free tier's wall ──────────────
+    if (confirmOverQuota) {
+      const quota = await quotaState()
+      const needSeconds = Math.round(prepared.durationSec)
+      if (needSeconds > quota.remainingToday) {
+        const go = await confirmOverQuota({
+          needSeconds,
+          remainingTodaySeconds: quota.remainingToday,
+          remainingThisHourSeconds: quota.remainingThisHour,
+        })
+        if (!go) throw new DOMException('已取消', 'AbortError')
+      }
+    }
+
     // ── 2. keep the compact copy the player will use ───────────────────
     const storageKey = `audio/${recordingId}.ogg`
     await writeFile(storageKey, prepared.playback)
@@ -167,6 +190,11 @@ export async function runTranscription(
       await setJob({ stage: label, doneChunks: chunk.index })
 
       lastRequestAt = Date.now()
+      // Chunks are CHUNK_SECONDS each except the last, which is whatever is left.
+      const chunkSeconds = Math.max(
+        0,
+        Math.min(CHUNK_SECONDS, Math.round(prepared.durationSec) - chunk.startSec),
+      )
       const segments = await withRetry(
         () => transcribeChunk(chunk.blob, chunk.fileName, cfg, signal),
         (ms, attempt) => {
@@ -176,6 +204,8 @@ export async function runTranscription(
         },
         signal,
       )
+
+      await recordUsage(chunkSeconds, settings.sttModel, true)
 
       // Chunk timings are relative to the chunk; shift them onto the recording.
       for (const s of segments) {

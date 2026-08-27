@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, saveNote } from '../db'
+import { db, recordCorrection, saveNote } from '../db'
 import type { SessionKind, TranscriptSegment } from '../db/schema'
 import { SESSION_KIND_LABEL } from '../db/schema'
 import { readFile, rootStatus } from '../storage/fsRoot'
 import { runTranscription } from '../stt/transcribe'
 import type { RunProgress } from '../stt/transcribe'
-import { formatBytes, formatDuration, formatTime } from '../lib/time'
+import { formatBytes, formatDuration, formatQuota, formatTime } from '../lib/time'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { NoteEditor } from '../components/NoteEditor'
 import type { NoteEditorHandle } from '../components/NoteEditor'
@@ -168,7 +168,16 @@ export function SessionPage() {
       const controller = new AbortController()
       abortRef.current = controller
       try {
-        await runTranscription(sessionId, file, setProgress, controller.signal)
+        await runTranscription(sessionId, file, setProgress, controller.signal, async (w) => {
+          // Seconds, not rounded minutes: this dialog only ever appears when the
+          // headroom is nearly gone, and "約 0 分鐘 / 只剩約 0 分鐘" says nothing.
+          return confirm(
+            `這份錄音 ${formatQuota(w.needSeconds)}，但今天的免費額度只剩 ` +
+              `${formatQuota(w.remainingTodaySeconds)}。\n\n` +
+              `超過的部分會被服務端擋下並自動重試，可能要等到額度回補。\n` +
+              `要繼續嗎？`,
+          )
+        })
       } catch (err) {
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
           setError(err instanceof Error ? err.message : String(err))
@@ -183,9 +192,28 @@ export function SessionPage() {
   )
 
   async function updateSegment(index: number, text: string) {
-    if (!transcript) return
+    if (!transcript || !course) return
+    const before = transcript.segments[index]?.text ?? ''
+    if (before === text) return
     const next = transcript.segments.map((s, i) => (i === index ? { ...s, text } : s))
     await db.transcripts.update(transcript.id, { segments: next, updatedAt: Date.now() })
+
+    // Every fix is a lesson about how this course's vocabulary is spelled.
+    const { learned, recorded } = await recordCorrection({
+      courseId: course.id,
+      sessionId,
+      before,
+      after: text,
+    })
+    // Nothing is said about a punctuation tidy-up: pointing the reader at a
+    // panel that has no row for it would just waste the trip.
+    setGlossaryNote(
+      learned
+        ? `同樣的修正出現第二次了，已把「${learned}」加入詞彙表。`
+        : recorded
+          ? '已記錄這次修正，可到課程頁的「轉錄修正」挑出要記住的詞。'
+          : null,
+    )
   }
 
   /** Adds whatever is selected in the transcript to this course's glossary. */

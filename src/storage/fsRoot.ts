@@ -120,6 +120,59 @@ async function getRoot(): Promise<FileSystemDirectoryHandle> {
   return handle
 }
 
+/** Characters a file name cannot carry on Windows or macOS. */
+const UNSAFE = /[\\/:*?"<>|\u0000-\u001f]/g
+
+export function safeName(name: string): string {
+  const cleaned = name.replace(UNSAFE, '_').replace(/\.+$/, '').trim()
+  return cleaned.length > 0 ? cleaned.slice(0, 120) : '未命名'
+}
+
+/**
+ * Writes into a directory the caller supplies, rather than the app's own
+ * storage root — used by export, where the destination is a folder the reader
+ * picked for this one operation (an Obsidian vault, say).
+ */
+export async function writeInto(
+  root: FileSystemDirectoryHandle,
+  key: string,
+  data: Blob | string,
+): Promise<void> {
+  const parts = key.split('/').filter(Boolean)
+  const name = parts.pop()
+  if (!name) throw new Error(`無效的檔案路徑：${key}`)
+  try {
+    let dir = root
+    for (const part of parts) dir = await dir.getDirectoryHandle(part, { create: true })
+    const file = await dir.getFileHandle(name, { create: true })
+    const stream = await file.createWritable()
+    try {
+      await stream.write(data)
+    } finally {
+      await stream.close()
+    }
+  } catch (err) {
+    // The browser's own message names no path ("The path supplied exists, but
+    // was not an entry of requested type"), which is unreadable half way through
+    // a 60-file export. Say which file gave up.
+    const why = err instanceof Error ? err.message : String(err)
+    throw new Error(`寫入「${key}」失敗：${why}`)
+  }
+}
+
+/** Must be called from a user gesture. Returns null if the picker is dismissed. */
+export async function pickExportFolder(): Promise<FileSystemDirectoryHandle | null> {
+  if (!window.showDirectoryPicker) {
+    throw new Error('這個瀏覽器不支援選擇資料夾，請用 Chrome 或 Edge')
+  }
+  try {
+    return await window.showDirectoryPicker({ id: 'ces-export', mode: 'readwrite' })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return null
+    throw err
+  }
+}
+
 /** Walks (and optionally creates) the directories in a "a/b/file.ext" key. */
 async function resolveDir(
   key: string,

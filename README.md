@@ -6,7 +6,7 @@
 資料存在自己的電腦，轉錄用自己的 API key，不經過第三方伺服器。
 摘要與整理由你自己做——軟體只負責讓你找得到、跳得回去、寫得順。
 
-## 現況：Phase 2 可用
+## 現況：Phase 4 · 功能齊備
 
 規格見 [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)。
 
@@ -57,9 +57,20 @@
   點搜尋結果會直接跳到音檔的那一秒
 - **閱讀材料**：書目、章節、頁數進度、對應週次、讀書筆記
 
-**還沒做**（Phase 4）
+**Phase 4 — 越用越準、拿得走**
 
-詞彙表自動累積、匯出 Obsidian、用量與免費額度儀表板。
+- **詞彙表自動累積**：你在逐字稿上改過的字都會被記下來。
+  英文與原文音譯（chesed、Barth）改**兩次**以上會自動進詞彙表；
+  中文沒有詞界可循，所以只列出幾個候選讓你點一下決定——
+  猜錯會教模型寫錯字，比不猜更糟。純標點的修改不算數
+- **匯出 Markdown**：一個學期寫成 `學期/課程/第 N 週.md` 的資料夾樹，
+  帶 YAML front matter、你的筆記、以及每行前綴 `` `[hh:mm:ss]` `` 的逐字稿。
+  指向 Obsidian vault，筆記就直接在那裡了
+- **備份與還原**：一個 JSON 檔含全部結構、逐字稿與筆記。
+  音檔本來就在你選的資料夾裡，那就是它自己的備份，不重複打包；
+  API key 與用量屬於這台機器，也不進備份
+- **用量儀表板**：對照 Groq 免費層的每日 8 小時與每小時 2 小時，滾動視窗計算。
+  轉錄前如果這份錄音會超過今天剩下的量，程式會先問你
 
 ## 開始使用
 
@@ -92,7 +103,8 @@ npm run dev
 ## 技術選型
 
 Vite + React + TypeScript · Dexie（IndexedDB）· File System Access API ·
-ffmpeg.wasm（單執行緒，不需 COOP/COEP）· CodeMirror 6 · HashRouter
+ffmpeg.wasm（單執行緒，不需 COOP/COEP）· CodeMirror 6 · HashRouter ·
+pdf.js · 匯出用 File System Access API 寫進你指定的資料夾
 
 靜態站，可直接部署到 GitHub Pages。
 
