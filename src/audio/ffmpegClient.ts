@@ -1,6 +1,5 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
-import classWorkerURL from '@ffmpeg/ffmpeg/worker?url'
 
 export interface AudioChunk {
   index: number
@@ -28,6 +27,9 @@ export interface PrepareResult {
 const CORE_BASE = `${import.meta.env.BASE_URL}ffmpeg/`
 const FULL = 'full.ogg'
 
+/** If the core never reports back, fail loudly instead of spinning for ever. */
+const LOAD_TIMEOUT_MS = 120_000
+
 let instance: FFmpeg | null = null
 let loading: Promise<FFmpeg> | null = null
 let logBuffer: string[] = []
@@ -48,11 +50,19 @@ async function getFFmpeg(onProgress?: (p: PrepareProgress) => void): Promise<FFm
       // Keep the buffer bounded — a long transcode emits thousands of lines.
       if (logBuffer.length > 400) logBuffer.splice(0, logBuffer.length - 400)
     })
-    await ff.load({
-      coreURL: absolute(`${CORE_BASE}ffmpeg-core.js`),
-      wasmURL: absolute(`${CORE_BASE}ffmpeg-core.wasm`),
-      classWorkerURL: absolute(classWorkerURL),
-    })
+    // No classWorkerURL: @ffmpeg/ffmpeg starts its worker with
+    // `new Worker(new URL('./worker.js', import.meta.url))`, which Vite bundles
+    // correctly on its own. Pointing classWorkerURL at `@ffmpeg/ffmpeg/worker?url`
+    // instead ships the *unbundled* source, whose relative imports (./const.js)
+    // resolve to nothing under assets/ — the worker then dies silently and load()
+    // hangs. Dev needed that workaround only until optimizeDeps.exclude was set.
+    await ff.load(
+      {
+        coreURL: absolute(`${CORE_BASE}ffmpeg-core.js`),
+        wasmURL: absolute(`${CORE_BASE}ffmpeg-core.wasm`),
+      },
+      { signal: AbortSignal.timeout(LOAD_TIMEOUT_MS) },
+    )
     instance = ff
     return ff
   })()
