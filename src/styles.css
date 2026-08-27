@@ -70,10 +70,11 @@ a { color: var(--accent-ink); }
 .app { display: flex; flex-direction: column; min-height: 100%; }
 
 .topbar {
-  display: flex; align-items: center; gap: 1rem;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
   padding: .7rem 1.25rem; background: var(--surface);
   border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20;
 }
+.topnav { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap; }
 .brand {
   font-family: var(--display); font-weight: 700; font-size: 1rem;
   color: var(--ink); text-decoration: none; white-space: nowrap;
@@ -436,3 +437,52 @@ a.list-item:hover { border-color: var(--accent); }
 }
 .cor-before { text-decoration: line-through; color: var(--danger); }
 .cor-context { font-size: .92rem; line-height: 1.7; margin-top: .2rem; }
+
+/* ── glossary table ──────────────────────────────────────────────── */
+/* The one table in the app, so the styling lives with the feature. It scrolls
+   inside its own box: four columns of Chinese course names overflow a narrow
+   window long before the page itself does. */
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+table.gloss { border-collapse: collapse; width: 100%; min-width: 44rem; font-size: .88rem; }
+table.gloss th, table.gloss td {
+  text-align: left; padding: .55rem .75rem; border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+table.gloss thead th {
+  font-size: .74rem; font-weight: 500; letter-spacing: .06em; color: var(--muted);
+  background: var(--surface-2); white-space: nowrap;
+}
+table.gloss tbody tr:last-child td { border-bottom: none; }
+table.gloss tbody tr:hover { background: var(--surface-2); }
+table.gloss td.act, table.gloss th.act { text-align: right; white-space: nowrap; }
+table.gloss td:first-child { font-weight: 500; white-space: nowrap; }
+table.gloss .tag + .tag { margin-left: .3rem; }
+
+/* A term is a button because clicking it renames everywhere, but it should
+   read as the term itself, not as a control competing with the row's actions. */
+.linkish {
+  font: inherit; color: inherit; background: none; border: none; padding: 0;
+  cursor: text; border-bottom: 1px dashed var(--line-strong);
+}
+.linkish:hover { border-bottom-color: var(--accent); color: var(--accent-ink); }
+
+.uses { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.use {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .78rem; text-decoration: none; color: var(--ink-soft);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: .1rem .3rem .1rem .45rem;
+}
+.use:hover { border-color: var(--accent); color: var(--accent-ink); }
+.use .dot { width: .45rem; height: .45rem; border-radius: 50%; flex: none; }
+.use .x {
+  font: inherit; line-height: 1; color: var(--muted); background: none;
+  border: none; padding: 0 .15rem; cursor: pointer; border-radius: 3px;
+}
+.use .x:hover { background: var(--danger-wash); color: var(--danger); }
+
+/* Fixed width, not auto: a select sized to its longest course name makes the
+   action column a different width on every row. */
+select.add-to { flex: 0 0 auto; width: 7rem; font-size: .78rem; padding: .28rem .5rem; }
+.btn.danger-text { color: var(--danger); }
+.btn.danger-text:hover:not(:disabled) { background: var(--danger-wash); color: var(--danger); }

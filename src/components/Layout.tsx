@@ -31,18 +31,26 @@ export function TopBar({ children }: { children?: ReactNode }) {
       </Link>
       {children}
       <span className="spacer" />
-      <Link to="/search" className="btn ghost sm">
-        搜尋
-      </Link>
-      <Link to="/calendar" className="btn ghost sm">
-        行事曆
-      </Link>
-      <Link to="/assignments" className="btn ghost sm">
-        作業
-      </Link>
-      <Link to="/settings" className="btn ghost sm">
-        設定
-      </Link>
+      {/* Grouped so the links wrap onto a second line together rather than one
+          at a time — five of them no longer fit beside a breadcrumb trail in a
+          narrow window. */}
+      <nav className="topnav" aria-label="主導覽">
+        <Link to="/search" className="btn ghost sm">
+          搜尋
+        </Link>
+        <Link to="/glossary" className="btn ghost sm">
+          詞彙表
+        </Link>
+        <Link to="/calendar" className="btn ghost sm">
+          行事曆
+        </Link>
+        <Link to="/assignments" className="btn ghost sm">
+          作業
+        </Link>
+        <Link to="/settings" className="btn ghost sm">
+          設定
+        </Link>
+      </nav>
     </header>
   )
 }

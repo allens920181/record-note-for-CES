@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getSettings, saveSettings } from '../db'
 import type { AppSettings } from '../db'
 import { DEFAULT_SETTINGS } from '../db/schema'
@@ -242,24 +243,27 @@ export function SettingsPage() {
             </div>
           </div>
 
+          {/* Read-only here on purpose: the list is edited on the glossary page,
+              and a second editor over the same data would let a stale copy of it
+              overwrite what was just done there. */}
           <div className="field">
-            <label htmlFor="s-gloss">全域專有名詞</label>
-            <textarea
-              id="s-gloss"
-              rows={3}
-              placeholder="巴特、士來馬赫、預定論、釋經學、logos、chesed"
-              value={settings.globalGlossary.join('、')}
-              onChange={(e) =>
-                patch({
-                  globalGlossary: e.target.value
-                    .split(/[、,\n]/)
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-                })
-              }
-            />
+            <label>全域專有名詞</label>
+            <div className="notice" style={{ marginTop: '.1rem' }}>
+              {settings.globalGlossary.length === 0 ? (
+                <>還沒有全域詞彙。</>
+              ) : (
+                <>
+                  {settings.globalGlossary.length} 個詞：
+                  {settings.globalGlossary.slice(0, 12).join('、')}
+                  {settings.globalGlossary.length > 12 && ' …'}
+                </>
+              )}
+              <br />
+              到 <Link to="/glossary">詞彙表總表</Link> 編輯——那裡同時看得到各課程的詞，
+              也可以把常出現的詞升成全域。
+            </div>
             <div className="hint">
-              用頓號或換行分隔。這串會隨每次轉錄一起送出，讓模型知道該怎麼寫這些字。
+              全域詞彙會隨每次轉錄一起送出，讓模型知道該怎麼寫這些字。
             </div>
           </div>
 
