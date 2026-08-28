@@ -1,4 +1,5 @@
 import { ChangeSet } from '@codemirror/state'
+import { moveLineDown, moveLineUp } from '@codemirror/commands'
 import { EditorView } from '@codemirror/view'
 import { NOTE_MARKS } from './marks'
 import type { NoteMark } from './marks'
@@ -24,6 +25,13 @@ export interface NoteCommand {
   label: string
   hint?: string
   group: '格式' | '標記' | '課堂'
+  /**
+   * CodeMirror key notation, when there is a shortcut for this.
+   *
+   * The menu prints it, so a command that can be reached from the keyboard
+   * says so — there is no point having a shortcut nobody is ever told about.
+   */
+  shortcut?: string
   /** Typed after `/` to find it, so the menu works without arrow keys. */
   keywords: string
   /** Off when the command has nothing to work with right now. */
@@ -156,6 +164,7 @@ export function insertMark(view: EditorView, kind: NoteMark) {
 export const NOTE_COMMANDS: NoteCommand[] = [
   {
     id: 'h1',
+    shortcut: 'Mod-1',
     label: '大標題',
     hint: '一堂課的主題',
     group: '格式',
@@ -164,6 +173,7 @@ export const NOTE_COMMANDS: NoteCommand[] = [
   },
   {
     id: 'h2',
+    shortcut: 'Mod-2',
     label: '中標題',
     hint: '一個段落的主題',
     group: '格式',
@@ -172,6 +182,7 @@ export const NOTE_COMMANDS: NoteCommand[] = [
   },
   {
     id: 'h3',
+    shortcut: 'Mod-3',
     label: '小標題',
     group: '格式',
     keywords: 'h3 小標題 heading',
@@ -179,6 +190,7 @@ export const NOTE_COMMANDS: NoteCommand[] = [
   },
   {
     id: 'bullet',
+    shortcut: 'Mod-Shift-8',
     label: '項目清單',
     group: '格式',
     keywords: 'list bullet 清單 項目',
@@ -208,6 +220,7 @@ export const NOTE_COMMANDS: NoteCommand[] = [
   },
   {
     id: 'bold',
+    shortcut: 'Mod-b',
     label: '粗體',
     group: '格式',
     keywords: 'bold 粗體 strong',
@@ -215,6 +228,7 @@ export const NOTE_COMMANDS: NoteCommand[] = [
   },
   {
     id: 'italic',
+    shortcut: 'Mod-i',
     label: '斜體',
     group: '格式',
     keywords: 'italic 斜體 em',
@@ -227,6 +241,29 @@ export const NOTE_COMMANDS: NoteCommand[] = [
     group: '格式',
     keywords: 'code 代碼 原文',
     run: (v) => wrapSelection(v, '`'),
+  },
+  {
+    id: 'move-up',
+    label: '整段往上搬',
+    hint: '選起來就能一次搬好幾行',
+    group: '格式',
+    shortcut: 'Alt-ArrowUp',
+    keywords: 'move up 上移 搬 重排 排序',
+    run: (v) => {
+      moveLineUp(v)
+      v.focus()
+    },
+  },
+  {
+    id: 'move-down',
+    label: '整段往下搬',
+    group: '格式',
+    shortcut: 'Alt-ArrowDown',
+    keywords: 'move down 下移 搬 重排 排序',
+    run: (v) => {
+      moveLineDown(v)
+      v.focus()
+    },
   },
   {
     id: 'rule',
@@ -252,6 +289,7 @@ export const NOTE_COMMANDS: NoteCommand[] = [
   ),
   {
     id: 'stamp',
+    shortcut: 'Alt-t',
     label: '插入目前時間',
     hint: '之後點一下就跳回這一秒',
     group: '課堂',

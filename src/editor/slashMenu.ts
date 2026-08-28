@@ -2,6 +2,7 @@ import { autocompletion } from '@codemirror/autocomplete'
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete'
 import { NOTE_COMMANDS } from './commands'
 import type { NoteContext } from './commands'
+import { keyLabel } from './keys'
 
 /**
  * Type `/` and the editor offers what it can do.
@@ -48,5 +49,21 @@ export function slashMenu(ctx: NoteContext) {
     icons: false,
     activateOnTyping: true,
     closeOnBlur: true,
+    // The shortcut is printed beside the command it belongs to. Labels are
+    // unique, so the command is looked up rather than smuggled through the
+    // completion object as an untyped extra field.
+    addToOptions: [
+      {
+        position: 90,
+        render: (completion) => {
+          const spec = NOTE_COMMANDS.find((c) => c.label === completion.label)?.shortcut
+          if (!spec) return null
+          const el = document.createElement('span')
+          el.className = 'cm-completionKey'
+          el.textContent = keyLabel(spec)
+          return el
+        },
+      },
+    ],
   })
 }

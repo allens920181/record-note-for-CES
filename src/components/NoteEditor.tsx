@@ -9,6 +9,7 @@ import { TIMESTAMP_TOKEN, formatTime, parseTime } from '../lib/time'
 import { richMarkdown } from '../editor/richMarkdown'
 import { slashMenu } from '../editor/slashMenu'
 import { NOTE_COMMANDS, toggleLinePrefix, wrapSelection } from '../editor/commands'
+import { keyLabel } from '../editor/keys'
 import type { NoteContext } from '../editor/commands'
 import { MARK_LINE, NOTE_MARKS } from '../editor/marks'
 import type { NoteMark } from '../editor/marks'
@@ -300,7 +301,16 @@ export function NoteEditor({
           {BAR.map((id) => {
             const cmd = NOTE_COMMANDS.find((c) => c.id === id)
             return cmd ? (
-              <button key={id} className="note-bar-btn" title={cmd.hint ?? cmd.label} onClick={() => runCommand(id)}>
+              <button
+                key={id}
+                className="note-bar-btn"
+                title={
+                  [cmd.hint ?? cmd.label, cmd.shortcut && keyLabel(cmd.shortcut)]
+                    .filter(Boolean)
+                    .join(' · ')
+                }
+                onClick={() => runCommand(id)}
+              >
                 {cmd.label}
               </button>
             ) : null

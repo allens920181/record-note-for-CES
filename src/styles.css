@@ -335,7 +335,9 @@ a.list-item:hover { border-color: var(--accent); }
   border: 1px solid var(--line-strong); border-radius: var(--radius);
   background: var(--surface); box-shadow: var(--shadow); overflow: hidden;
 }
-.cm-tooltip-autocomplete > ul { font-family: var(--body); max-height: 17rem; }
+/* !important: the base theme caps the list at 10em, which shows seven of
+   fifteen commands and makes the menu feel like it is hiding things. */
+.cm-tooltip-autocomplete > ul { font-family: var(--body); max-height: 21rem !important; }
 .cm-tooltip-autocomplete > ul > li {
   display: flex; align-items: baseline; gap: .5rem;
   padding: .35rem .7rem; font-size: .85rem; color: var(--ink);
@@ -347,9 +349,18 @@ a.list-item:hover { border-color: var(--accent); }
 }
 .cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail { color: var(--accent-ink); }
 .cm-tooltip-autocomplete .cm-completionDetail {
-  font-style: normal; font-size: .74rem; color: var(--muted); margin-left: auto;
+  font-style: normal; font-size: .74rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .cm-tooltip-autocomplete .cm-completionLabel { font-weight: 500; }
+/* The shortcut owns the right edge, so the keys line up down the menu whether
+   or not the command above happened to carry a hint. */
+.cm-tooltip-autocomplete .cm-completionKey {
+  flex: 0 0 auto; margin-left: auto;
+  font-family: var(--mono); font-size: .7rem;
+  color: var(--muted); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 3px; padding: 0 .3rem;
+}
 .cm-tooltip-autocomplete .cm-completionSection {
   font-family: var(--mono); font-size: .66rem; letter-spacing: .08em;
   color: var(--muted); background: var(--surface-2);

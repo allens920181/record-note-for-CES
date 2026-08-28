@@ -11,6 +11,7 @@ import { formatBytes, formatDuration, formatQuota, formatTime } from '../lib/tim
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { NoteEditor } from '../components/NoteEditor'
 import type { OutlineEntry } from '../components/NoteEditor'
+import { keyLabel } from '../editor/keys'
 import { WeekPlanPanel } from '../components/WeekPlanPanel'
 import type { NoteEditorHandle } from '../components/NoteEditor'
 import { RecorderPanel } from '../components/RecorderPanel'
@@ -501,22 +502,31 @@ export function SessionPage() {
               </span>
               {hasTranscript && !showFiles && (
                 <>
-                  <button
-                    className="btn ghost sm"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={quoteIntoNote}
-                    title="把選取的句子引用到右邊的筆記，帶著它自己的時間"
-                  >
-                    引用到筆記
-                  </button>
-                  <button
-                    className="btn ghost sm"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => void addSelectionToGlossary()}
-                    title="把選取的專有名詞加入這門課的詞彙表"
-                  >
-                    選取加入詞彙表
-                  </button>
+                  {/* Both of these work on what is selected in the transcript,
+                      and neither can while it is being edited: the selection
+                      then lives inside a textarea, and their preventDefault —
+                      there to keep the selection alive — would also stop the
+                      edit in progress from being committed on blur. */}
+                  {!editingTranscript && (
+                    <>
+                      <button
+                        className="btn ghost sm"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={quoteIntoNote}
+                        title="把選取的句子引用到右邊的筆記，帶著它自己的時間"
+                      >
+                        引用到筆記
+                      </button>
+                      <button
+                        className="btn ghost sm"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => void addSelectionToGlossary()}
+                        title="把選取的專有名詞加入這門課的詞彙表"
+                      >
+                        選取加入詞彙表
+                      </button>
+                    </>
+                  )}
                   <button
                     className="btn ghost sm"
                     onClick={() => setFollow((f) => !f)}
@@ -725,8 +735,12 @@ export function SessionPage() {
                 </button>
               )}
               {hasTranscript && (
-                <button className="btn ghost sm" onClick={stampNow} title="插入目前播放時間（Alt+T）">
-                  插入時間戳 ⌥T
+                <button
+                  className="btn ghost sm"
+                  onClick={stampNow}
+                  title="插入目前播放時間"
+                >
+                  插入時間戳 {keyLabel('Alt-t')}
                 </button>
               )}
             </div>
