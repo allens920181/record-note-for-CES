@@ -437,7 +437,6 @@ a.list-item:hover { border-color: var(--accent); }
 .asg-head:hover { background: var(--surface-2); }
 .asg-detail { padding: 0 1.1rem 1.1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .asg-detail h3 { margin-top: 0; }
-.subtask input[type='checkbox'] { accent-color: var(--accent); }
 
 /* ── search ──────────────────────────────────────────────────────── */
 .hit { border: 1px solid var(--line); font-family: var(--body); }

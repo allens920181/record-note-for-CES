@@ -525,10 +525,6 @@ export async function deleteAssignment(id: string): Promise<void> {
   await db.assignments.delete(id)
 }
 
-export function makeSubTasks(titles: string[]): SubTask[] {
-  return titles.map((title) => ({ id: newId('st'), title, done: false }))
-}
-
 /** Where an assignment stands, for a progress bar and the status chip. */
 export function assignmentProgress(a: Assignment): { done: number; total: number } {
   if (a.status === 'done') return { done: a.subtasks.length || 1, total: a.subtasks.length || 1 }

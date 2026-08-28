@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom'
 import {
   createAssignment,
   deleteAssignment,
-  makeSubTasks,
   todayISO,
   updateAssignment,
 } from '../db'
 import type { Assignment, AssignmentStatus, Course, SubTask, WorkBlock } from '../db'
 import { ASSIGNMENT_STATUS_LABEL, SUBTASK_TEMPLATES } from '../db/schema'
+import { newId } from '../lib/id'
+import { TaskChecklist } from './TaskChecklist'
 import { describeDays, workloadOf } from '../schedule/workload'
 import type { Pressure } from '../schedule/workload'
 import { Modal } from './Modal'
@@ -121,8 +122,6 @@ function AssignmentDetail({
   hoursAvailable: number
   onDelete: () => void
 }) {
-  const [newTask, setNewTask] = useState('')
-
   function patchTasks(subtasks: SubTask[]) {
     void updateAssignment(assignment.id, { subtasks })
   }
@@ -184,106 +183,30 @@ function AssignmentDetail({
       </div>
 
       <h3 style={{ marginTop: '1.2rem' }}>拆解步驟</h3>
-      {assignment.subtasks.length === 0 ? (
-        <p className="small muted" style={{ margin: '.3rem 0 .7rem' }}>
-          還沒拆解。可以直接套一個範本：
-        </p>
-      ) : (
-        <div className="stack" style={{ margin: '.6rem 0' }}>
-          {assignment.subtasks.map((task, i) => (
-            <div key={task.id} className="row subtask" style={{ gap: '.5rem', alignItems: 'center' }}>
-              <input
-                type="checkbox"
-                checked={task.done}
-                style={{ width: '1rem', flex: '0 0 auto' }}
-                onChange={(e) =>
-                  patchTasks(
-                    assignment.subtasks.map((t, j) =>
-                      j === i ? { ...t, done: e.target.checked } : t,
-                    ),
-                  )
-                }
-              />
-              <input
-                type="text"
-                className="grow"
-                value={task.title}
-                onChange={(e) =>
-                  patchTasks(
-                    assignment.subtasks.map((t, j) =>
-                      j === i ? { ...t, title: e.target.value } : t,
-                    ),
-                  )
-                }
-              />
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                placeholder="時數"
-                style={{ flex: '0 0 5.5rem' }}
-                value={task.estimateHours ?? ''}
-                onChange={(e) =>
-                  patchTasks(
-                    assignment.subtasks.map((t, j) =>
-                      j === i
-                        ? { ...t, estimateHours: e.target.value ? Number(e.target.value) : undefined }
-                        : t,
-                    ),
-                  )
-                }
-              />
-              <button
-                className="btn danger sm"
-                style={{ flex: '0 0 auto' }}
-                onClick={() => patchTasks(assignment.subtasks.filter((_, j) => j !== i))}
-              >
-                移除
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="row" style={{ gap: '.5rem', marginBottom: '.8rem' }}>
-        {SUBTASK_TEMPLATES.map((t) => (
-          <button
-            key={t.name}
-            className="btn sm"
-            style={{ flex: '0 0 auto' }}
-            onClick={() => patchTasks([...assignment.subtasks, ...makeSubTasks(t.steps)])}
-          >
-            套用「{t.name}」
-          </button>
-        ))}
-      </div>
-
-      <div className="row" style={{ gap: '.5rem' }}>
-        <input
-          type="text"
-          className="grow"
-          placeholder="再加一個步驟"
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' || !newTask.trim()) return
-            e.preventDefault()
-            patchTasks([...assignment.subtasks, ...makeSubTasks([newTask.trim()])])
-            setNewTask('')
-          }}
-        />
-        <button
-          className="btn"
-          style={{ flex: '0 0 auto' }}
-          disabled={!newTask.trim()}
-          onClick={() => {
-            patchTasks([...assignment.subtasks, ...makeSubTasks([newTask.trim()])])
-            setNewTask('')
-          }}
-        >
-          加入
-        </button>
-      </div>
+      {/* `estimateHours` is this table's name for the same number the week
+          plan calls `hours`; mapping it here keeps the stored shape untouched. */}
+      <TaskChecklist
+        items={assignment.subtasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          done: t.done,
+          hours: t.estimateHours,
+        }))}
+        onChange={(next) =>
+          patchTasks(
+            next.map((i) => ({
+              id: i.id,
+              title: i.title,
+              done: i.done,
+              estimateHours: i.hours,
+            })),
+          )
+        }
+        makeId={() => newId('st')}
+        templates={SUBTASK_TEMPLATES}
+        addPlaceholder="再加一個步驟"
+        emptyText="還沒拆解。可以直接套一個範本："
+      />
 
       <div className="notice" style={{ marginTop: '1rem' }}>
         {needed > 0 ? (

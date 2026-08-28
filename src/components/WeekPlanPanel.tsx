@@ -4,6 +4,8 @@ import { db, saveWeekPlan } from '../db'
 import type { PlanItem } from '../db/schema'
 import { PLAN_TEMPLATES, READING_STATUS_LABEL } from '../db/schema'
 import { newId } from '../lib/id'
+import { TaskChecklist } from './TaskChecklist'
+import type { ChecklistItem } from './TaskChecklist'
 
 interface Props {
   sessionId: string
@@ -24,9 +26,6 @@ export function WeekPlanPanel({ sessionId, courseId, compact }: Props) {
     () => db.readings.where('courseId').equals(courseId).sortBy('createdAt'),
     [courseId],
   )
-  const [draft, setDraft] = useState('')
-  const [hours, setHours] = useState('')
-
   // Dexie hands back undefined while loading and again when there is no row.
   const items: PlanItem[] = plan?.items ?? []
   const done = items.filter((i) => i.done).length
@@ -41,33 +40,37 @@ export function WeekPlanPanel({ sessionId, courseId, compact }: Props) {
 
   const write = (next: PlanItem[]) => saveWeekPlan(sessionId, courseId, next)
 
-  async function toggle(item: PlanItem) {
-    const nowDone = !item.done
-    await write(items.map((i) => (i.id === item.id ? { ...i, done: nowDone } : i)))
-    // Finishing a reading item is the same fact as having read the book.
-    if (item.readingId) {
-      const reading = await db.readings.get(item.readingId)
-      if (reading) {
-        await db.readings.update(item.readingId, { status: nowDone ? 'read' : 'reading' })
-        setFlash(
-          nowDone
-            ? `「${reading.title}」在閱讀清單也標成已讀完了。`
-            : `「${reading.title}」改回讀到一半。`,
-        )
+  /**
+   * The checklist hands back the whole list, so the one thing it cannot know —
+   * that this row stands for a book — is worked out by comparing.
+   */
+  async function apply(next: ChecklistItem[]) {
+    const rows: PlanItem[] = next.map((i) => {
+      const before = items.find((o) => o.id === i.id)
+      return {
+        id: i.id,
+        title: i.title,
+        done: i.done,
+        hours: i.hours,
+        ...(before?.readingId ? { readingId: before.readingId } : {}),
       }
-    }
-  }
+    })
+    await write(rows)
 
-  function add() {
-    const title = draft.trim()
-    if (!title) return
-    setDraft('')
-    const h = Number(hours)
-    setHours('')
-    void write([
-      ...items,
-      { id: newId('pi'), title, done: false, hours: Number.isFinite(h) && h > 0 ? h : undefined },
-    ])
+    // Finishing a reading item is the same fact as having read the book.
+    const flipped = rows.find((r) => {
+      const before = items.find((o) => o.id === r.id)
+      return before && before.done !== r.done && r.readingId
+    })
+    if (!flipped?.readingId) return
+    const reading = await db.readings.get(flipped.readingId)
+    if (!reading) return
+    await db.readings.update(flipped.readingId, { status: flipped.done ? 'read' : 'reading' })
+    setFlash(
+      flipped.done
+        ? `「${reading.title}」在閱讀清單也標成已讀完了。`
+        : `「${reading.title}」改回讀到一半。`,
+    )
   }
 
   const unplannedReadings = (readings ?? []).filter(
@@ -75,7 +78,7 @@ export function WeekPlanPanel({ sessionId, courseId, compact }: Props) {
   )
 
   return (
-    <section className={compact ? 'card' : 'card'} style={{ marginBottom: compact ? '1rem' : '1.25rem' }}>
+    <section className="card" style={{ marginBottom: compact ? '1rem' : '1.25rem' }}>
       <div className="grade-head">
         <h2 style={{ margin: 0, fontSize: compact ? '.95rem' : undefined }}>本週進度</h2>
         {items.length > 0 && (
@@ -99,108 +102,20 @@ export function WeekPlanPanel({ sessionId, courseId, compact }: Props) {
         </div>
       )}
 
-      {items.length === 0 ? (
-        <div className="empty" style={{ padding: '1.1rem' }}>
-          <p>還沒排這週要做什麼。</p>
-          <div className="row" style={{ gap: '.4rem', justifyContent: 'center' }}>
-            {PLAN_TEMPLATES.map((t) => (
-              <button
-                key={t.name}
-                className="btn sm"
-                style={{ flex: '0 0 auto' }}
-                onClick={() =>
-                  void write(
-                    t.steps.map((title) => ({ id: newId('pi'), title, done: false })),
-                  )
-                }
-              >
-                套用「{t.name}」
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="stack" style={{ gap: '.35rem' }}>
-          {items.map((item) => (
-            <div key={item.id} className={`plan-item${item.done ? ' is-done' : ''}`}>
-              <input
-                type="checkbox"
-                checked={item.done}
-                aria-label={item.title}
-                onChange={() => void toggle(item)}
-              />
-              <input
-                type="text"
-                className="plan-title"
-                defaultValue={item.title}
-                onBlur={(e) =>
-                  void write(
-                    items.map((i) => (i.id === item.id ? { ...i, title: e.target.value } : i)),
-                  )
-                }
-              />
-              {item.readingId && <span className="tag">閱讀</span>}
-              <div className="pct">
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  aria-label="預估小時"
-                  placeholder="—"
-                  defaultValue={item.hours ?? ''}
-                  onBlur={(e) =>
-                    void write(
-                      items.map((i) =>
-                        i.id === item.id
-                          ? { ...i, hours: e.target.value ? Number(e.target.value) : undefined }
-                          : i,
-                      ),
-                    )
-                  }
-                />
-                <span className="small muted">h</span>
-              </div>
-              <button
-                className="btn ghost sm"
-                style={{ flex: '0 0 auto' }}
-                onClick={() => void write(items.filter((i) => i.id !== item.id))}
-              >
-                移除
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="row" style={{ gap: '.4rem', marginTop: '.7rem' }}>
-        <input
-          type="text"
-          placeholder="再加一項，例如「讀完《基督教要義》21–24 章」"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              add()
-            }
-          }}
-        />
-        <div className="pct" style={{ flex: '0 0 5.5rem' }}>
-          <input
-            type="number"
-            min={0}
-            step={0.5}
-            placeholder="小時"
-            aria-label="預估小時"
-            value={hours}
-            onChange={(e) => setHours(e.target.value)}
-          />
-          <span className="small muted">h</span>
-        </div>
-        <button className="btn" style={{ flex: '0 0 auto' }} disabled={!draft.trim()} onClick={add}>
-          加入
-        </button>
-      </div>
+      <TaskChecklist
+        items={items.map((i) => ({
+          id: i.id,
+          title: i.title,
+          done: i.done,
+          hours: i.hours,
+          ...(i.readingId ? { tag: '閱讀' } : {}),
+        }))}
+        onChange={(next) => void apply(next)}
+        makeId={() => newId('pi')}
+        templates={PLAN_TEMPLATES}
+        addPlaceholder="再加一項，例如「讀完《基督教要義》21–24 章」"
+        emptyText="還沒排這週要做什麼。"
+      />
 
       {unplannedReadings.length > 0 && (
         <p className="small muted" style={{ marginTop: '.8rem', marginBottom: 0 }}>
