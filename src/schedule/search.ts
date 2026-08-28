@@ -1,4 +1,6 @@
 import { db } from '../db'
+import { collectMarks } from '../editor/marks'
+import type { NoteMark } from '../editor/marks'
 
 export type HitKind = 'transcript' | 'note' | 'file'
 
@@ -160,4 +162,79 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   }
 
   return hits
+}
+
+// ── 標記 ───────────────────────────────────────────────────────────
+
+/**
+ * Every 重點 / 疑問 / 考點 in a term, newest week first.
+ *
+ * This is the reason to flag something in the first place: the week it was
+ * written in is not where you need it. Reading the notes directly rather than
+ * going through `search` because a mark is a block, not a phrase — a substring
+ * hit would show sixty characters around `[!疑問]` and cut the question in half.
+ */
+export interface MarkHit {
+  key: string
+  kind: NoteMark
+  courseId: string
+  courseName: string
+  courseColor: string
+  sessionId: string
+  label: string
+  text: string
+  /** 0-based line in the note, so the workspace could scroll to it later. */
+  line: number
+}
+
+export async function findMarks(
+  kinds: NoteMark[],
+  options: { termId?: string; courseId?: string } = {},
+): Promise<MarkHit[]> {
+  if (kinds.length === 0) return []
+  const wanted = new Set(kinds)
+
+  const courses = options.courseId
+    ? [await db.courses.get(options.courseId)].filter((c) => c !== undefined)
+    : options.termId
+      ? await db.courses.where('termId').equals(options.termId).toArray()
+      : await db.courses.toArray()
+  if (courses.length === 0) return []
+
+  const byCourse = new Map(courses.map((c) => [c.id, c]))
+  const sessions = await db.sessions
+    .where('courseId')
+    .anyOf(courses.map((c) => c.id))
+    .toArray()
+  if (sessions.length === 0) return []
+
+  const notes = await db.notes
+    .where('sessionId')
+    .anyOf(sessions.map((s) => s.id))
+    .toArray()
+  const bySession = new Map(sessions.map((s) => [s.id, s]))
+
+  const out: MarkHit[] = []
+  for (const note of notes) {
+    const session = bySession.get(note.sessionId)
+    const course = session ? byCourse.get(session.courseId) : undefined
+    if (!session || !course) continue
+    for (const found of collectMarks(note.markdown)) {
+      if (!wanted.has(found.kind)) continue
+      out.push({
+        key: `${note.sessionId}:${found.line}`,
+        kind: found.kind,
+        courseId: course.id,
+        courseName: course.name,
+        courseColor: course.color,
+        sessionId: session.id,
+        label: `第 ${session.index} 週 · ${session.date}`,
+        text: found.text,
+        line: found.line,
+      })
+    }
+  }
+
+  // Most recent week first: revision runs backwards from where you are now.
+  return out.sort((a, b) => b.label.localeCompare(a.label) || a.line - b.line)
 }

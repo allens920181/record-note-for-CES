@@ -10,6 +10,7 @@ import type { RunProgress } from '../stt/transcribe'
 import { formatBytes, formatDuration, formatQuota, formatTime } from '../lib/time'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { NoteEditor } from '../components/NoteEditor'
+import type { OutlineEntry } from '../components/NoteEditor'
 import { WeekPlanPanel } from '../components/WeekPlanPanel'
 import type { NoteEditorHandle } from '../components/NoteEditor'
 import { RecorderPanel } from '../components/RecorderPanel'
@@ -78,6 +79,11 @@ export function SessionPage() {
   const [showFiles, setShowFiles] = useState(false)
   /** Below 60rem only one pane fits; this says which. */
   const [narrowPane, setNarrowPane] = useState<'left' | 'note'>('left')
+  const [outline, setOutline] = useState<{ entries: OutlineEntry[]; line: number }>({
+    entries: [],
+    line: 1,
+  })
+  const [showOutline, setShowOutline] = useState(false)
   /** Which of the three transcript actions is being confirmed, if any. */
   const [redo, setRedo] = useState<'again' | 'replace' | 'drop' | null>(null)
 
@@ -286,6 +292,53 @@ export function SessionPage() {
     )
   }
 
+  /**
+   * What is selected in the transcript, and when it was said.
+   *
+   * The timestamp comes from the segment the selection starts in — not from
+   * `currentTime`. Quoting a line you scrolled back to while the audio kept
+   * playing would otherwise stamp it with a moment it has nothing to do with.
+   */
+  function transcriptQuote(): { text: string; seconds: number } | null {
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed) return null
+    const segOf = (node: Node | null | undefined) => {
+      const el = node instanceof Element ? node : node?.parentElement
+      return el?.closest<HTMLElement>('.tx-seg') ?? null
+    }
+    const anchor = segOf(sel.anchorNode)
+    if (!anchor) return null
+    const first = Number(anchor.dataset.seg)
+    const focusEl = segOf(sel.focusNode)
+    const last = focusEl ? Number(focusEl.dataset.seg) : first
+    if (!Number.isFinite(first)) return null
+    const from = Math.min(first, last)
+    const to = Math.max(first, Number.isFinite(last) ? last : first)
+    const start = segments[from]
+    if (!start) return null
+    // Within one segment, take exactly what was highlighted. Across several,
+    // rebuild from the segments: the raw selection string has the time labels
+    // of every row caught in the middle.
+    const text =
+      from === to
+        ? sel.toString().trim()
+        : segments
+            .slice(from, to + 1)
+            .map((seg) => seg.text.trim())
+            .join('')
+    return text ? { text, seconds: start.start } : null
+  }
+
+  /** Pulls the selected transcript into the note as a quote that jumps back. */
+  function quoteIntoNote() {
+    if (!transcriptQuote()) {
+      setGlossaryNote('請先在左邊的逐字稿選取要引用的句子。')
+      return
+    }
+    editorRef.current?.run('transcript')
+    setNarrowPane('note')
+  }
+
   /** Adds whatever is selected in the transcript to this course's glossary. */
   async function addSelectionToGlossary() {
     if (!course) return
@@ -448,6 +501,14 @@ export function SessionPage() {
               </span>
               {hasTranscript && !showFiles && (
                 <>
+                  <button
+                    className="btn ghost sm"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={quoteIntoNote}
+                    title="把選取的句子引用到右邊的筆記，帶著它自己的時間"
+                  >
+                    引用到筆記
+                  </button>
                   <button
                     className="btn ghost sm"
                     onMouseDown={(e) => e.preventDefault()}
@@ -648,7 +709,21 @@ export function SessionPage() {
 
           <section className="pane">
             <div className="pane-head">
-              <span className="grow">我的筆記</span>
+              <span className="grow">
+                我的筆記
+                <span className="small muted" style={{ marginLeft: '.5rem' }}>
+                  輸入「/」開啟指令選單
+                </span>
+              </span>
+              {outline.entries.length > 0 && (
+                <button
+                  className={`btn ghost sm${showOutline ? ' primary' : ''}`}
+                  onClick={() => setShowOutline((v) => !v)}
+                  title="這份筆記的大綱與標記"
+                >
+                  大綱 {outline.entries.length}
+                </button>
+              )}
               {hasTranscript && (
                 <button className="btn ghost sm" onClick={stampNow} title="插入目前播放時間（Alt+T）">
                   插入時間戳 ⌥T
@@ -656,6 +731,35 @@ export function SessionPage() {
               )}
             </div>
             <div className="pane-body">
+              {showOutline && (
+                <div className="note-outline">
+                  {outline.entries.map((e) => {
+                    // The section you are in is the last one that starts above
+                    // the cursor — headings do not record where they end.
+                    const active =
+                      e.line ===
+                      outline.entries.reduce(
+                        (best, cur) => (cur.line <= outline.line ? cur.line : best),
+                        0,
+                      )
+                    return (
+                      <button
+                        key={`${e.line}-${e.text}`}
+                        className={`outline-row${active ? ' is-here' : ''} ${
+                          e.kind === 'mark' ? `is-mark is-${e.mark}` : `is-h${e.level}`
+                        }`}
+                        onClick={() => {
+                          editorRef.current?.goToLine(e.line)
+                          setShowOutline(false)
+                        }}
+                      >
+                        {e.kind === 'mark' && <span className="outline-tag">{e.mark}</span>}
+                        <span className="outline-text">{e.text || '（未命名）'}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               {note !== undefined && (
                 <NoteEditor
                   key={sessionId}
@@ -664,6 +768,11 @@ export function SessionPage() {
                   onChange={onNoteChange}
                   onSeek={seek}
                   onStampRequested={stampNow}
+                  context={{
+                    now: () => (hasTranscript ? currentTime : null),
+                    transcriptQuote,
+                  }}
+                  onOutline={(entries, line) => setOutline({ entries, line })}
                 />
               )}
             </div>

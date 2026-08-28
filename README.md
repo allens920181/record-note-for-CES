@@ -20,6 +20,22 @@
 - `Alt+T` 把目前播放時間插進筆記
 - 逐字稿可就地修正錯字，筆記自動存檔
 
+**筆記區**
+
+- **輸入 `/` 叫出指令選單**：標題、清單、待辦、引用、分隔線、標記、插入時間戳、
+  引用逐字稿。可以打中文篩選，不必記得 markdown 的符號
+  （中文輸入法下為了兩個 `*` 切換一次輸入法，是件很煩的事）
+- **選取文字就浮出工具列**：粗體、斜體、行內代碼、標題、引用、待辦，以及三種標記。
+  `Ctrl+B` / `Ctrl+I` / `Ctrl+1~3` 也都在
+- **markdown 當場就畫出來**：標題是大的、粗體是粗的、引用有左邊框、
+  待辦是可以點的框。游標所在的那一行會把符號顯示出來讓你改，離開就收起來
+- **標記 重點 / 疑問 / 考點**：用 Obsidian 的 callout 語法（`> [!疑問] …`）存，
+  在編輯器裡是有顏色的區塊，匯出到 Obsidian vault 那邊也認得
+- **引用逐字稿**：在左邊選一段話，一鍵成為筆記裡的引用，**帶著那句話自己的時間戳**——
+  不是目前播放時間。點下去跳回原音
+- **大綱**：標題與標記自動組成跳轉清單，長筆記不必捲。目前寫到哪一節會標出來
+- **整學期回顧標記**：搜尋頁上開「疑問」，所有課所有週標過的疑問一次列出來，考前複習用
+
 **Phase 2 — 帶去教室**
 
 - **App 內直接錄音**：每 3 分鐘把一段寫進你的資料夾，分頁當掉最多丟 3 分鐘；
@@ -163,7 +179,7 @@ npm run dev     # 然後開 http://localhost:5173
 ## 技術選型
 
 Vite + React + TypeScript · Dexie（IndexedDB）· File System Access API ·
-ffmpeg.wasm（單執行緒，不需 COOP/COEP）· CodeMirror 6 · HashRouter ·
+ffmpeg.wasm（單執行緒，不需 COOP/COEP）· CodeMirror 6（含 markdown 即時樣式與 `/` 指令）· HashRouter ·
 pdf.js · 匯出用 File System Access API 寫進你指定的資料夾
 
 純靜態站，沒有後端。部署到 Netlify、Cloudflare Pages、GitHub Pages 都可以——

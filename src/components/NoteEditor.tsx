@@ -1,15 +1,25 @@
-import { useEffect, useImperativeHandle, useRef } from 'react'
-import { EditorState, RangeSetBuilder } from '@codemirror/state'
+import { useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { EditorState, Prec, RangeSetBuilder } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, keymap } from '@codemirror/view'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { markdown } from '@codemirror/lang-markdown'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { TIMESTAMP_TOKEN, formatTime, parseTime } from '../lib/time'
+import { richMarkdown } from '../editor/richMarkdown'
+import { slashMenu } from '../editor/slashMenu'
+import { NOTE_COMMANDS, toggleLinePrefix, wrapSelection } from '../editor/commands'
+import type { NoteContext } from '../editor/commands'
+import { MARK_LINE, NOTE_MARKS } from '../editor/marks'
+import type { NoteMark } from '../editor/marks'
 
 export interface NoteEditorHandle {
   /** Drops a [[hh:mm:ss]] token at the cursor and refocuses the editor. */
   insertTimestamp: (seconds: number) => void
+  /** Runs one of the shared note commands by id. */
+  run: (id: string) => void
+  /** Puts the cursor on a 1-based line and scrolls it into view. */
+  goToLine: (line: number) => void
   focus: () => void
 }
 
@@ -21,7 +31,16 @@ interface Props {
   onSeek: (seconds: number) => void
   /** Invoked by the Alt+T binding so the caller can supply the current time. */
   onStampRequested: () => void
+  /** What the commands need from the page around the editor. */
+  context: NoteContext
+  /** Reports the note's structure so an outline can be drawn beside it. */
+  onOutline?: (entries: OutlineEntry[], activeLine: number) => void
 }
+
+/** One jumpable place in a note: a heading, or something you flagged. */
+export type OutlineEntry =
+  | { kind: 'heading'; level: number; text: string; line: number }
+  | { kind: 'mark'; mark: NoteMark; text: string; line: number }
 
 const timestampMark = Decoration.mark({ class: 'cm-ts' })
 
@@ -57,6 +76,62 @@ function build(view: EditorView): DecorationSet {
   return builder.finish()
 }
 
+/**
+ * The places worth jumping to in a note: its headings, and everything flagged.
+ *
+ * Marks belong here as much as headings do — the reason to flag something is
+ * to come back to it, and coming back is exactly what an outline is for.
+ */
+export function outlineOf(markdownText: string): OutlineEntry[] {
+  const out: OutlineEntry[] = []
+  let fenced = false
+  markdownText.split('\n').forEach((text, i) => {
+    if (/^\s*```/.test(text)) fenced = !fenced
+    if (fenced) return
+    const heading = /^(#{1,6})\s+(.*)$/.exec(text)
+    if (heading && heading[2].trim()) {
+      out.push({ kind: 'heading', level: heading[1].length, text: heading[2].trim(), line: i + 1 })
+      return
+    }
+    const mark = MARK_LINE.exec(text)
+    if (mark) {
+      out.push({ kind: 'mark', mark: mark[1] as NoteMark, text: mark[2].trim(), line: i + 1 })
+    }
+  })
+  return out
+}
+
+/*
+ * Enter continues the list or quote you are in — `markdown()` binds that
+ * itself, including blockquotes, so there is no copy of it here.
+ */
+
+/**
+ * ...except for one case it does not cover: Enter on an *empty task item*.
+ *
+ * A blank `- [ ] ` still carries its checkbox, so the built-in continuation
+ * never sees it as empty and hands back another one. There is no way out of a
+ * checklist except backspacing through the marker, which is exactly the sort
+ * of thing that stops someone using checklists at all. This ends the item and
+ * leaves everything else to the markdown keymap.
+ */
+const endEmptyItem = {
+  key: 'Enter',
+  run: (view: EditorView) => {
+    const range = view.state.selection.main
+    if (!range.empty) return false
+    const line = view.state.doc.lineAt(range.head)
+    if (range.head !== line.to) return false
+    const m = /^(\s*)(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s*)?$/.exec(line.text)
+    if (!m) return false
+    view.dispatch({
+      changes: { from: line.from, to: line.to, insert: m[1] },
+      selection: { anchor: line.from + m[1].length },
+    })
+    return true
+  },
+}
+
 const theme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'transparent', color: 'var(--ink)' },
   '.cm-gutters': { display: 'none' },
@@ -66,14 +141,32 @@ const theme = EditorView.theme({
   '.cm-placeholder': { color: 'var(--muted)' },
 })
 
-export function NoteEditor({ ref, initialValue, onChange, onSeek, onStampRequested }: Props) {
+/** The handful of commands worth a button when text is selected. */
+const BAR = ['bold', 'italic', 'code', 'h2', 'quote', 'todo'] as const
+
+export function NoteEditor({
+  ref,
+  initialValue,
+  onChange,
+  onSeek,
+  onStampRequested,
+  context,
+  onOutline,
+}: Props) {
   const host = useRef<HTMLDivElement | null>(null)
   const view = useRef<EditorView | null>(null)
+  const [bar, setBar] = useState<{ top: number; left: number } | null>(null)
 
   // Callbacks live in refs so changing them never tears down the editor,
   // which would drop the cursor and undo history mid-sentence.
-  const cbs = useRef({ onChange, onSeek, onStampRequested })
-  cbs.current = { onChange, onSeek, onStampRequested }
+  const cbs = useRef({ onChange, onSeek, onStampRequested, context, onOutline })
+  cbs.current = { onChange, onSeek, onStampRequested, context, onOutline }
+
+  function runCommand(id: string) {
+    const v = view.current
+    const cmd = NOTE_COMMANDS.find((c) => c.id === id)
+    if (v && cmd) cmd.run(v, cbs.current.context)
+  }
 
   useImperativeHandle(ref, () => ({
     insertTimestamp(seconds: number) {
@@ -87,6 +180,14 @@ export function NoteEditor({ ref, initialValue, onChange, onSeek, onStampRequest
       })
       v.focus()
     },
+    run: runCommand,
+    goToLine(line: number) {
+      const v = view.current
+      if (!v) return
+      const at = v.state.doc.line(Math.min(Math.max(1, line), v.state.doc.lines)).from
+      v.dispatch({ selection: { anchor: at }, scrollIntoView: true })
+      v.focus()
+    },
     focus() {
       view.current?.focus()
     },
@@ -94,12 +195,21 @@ export function NoteEditor({ ref, initialValue, onChange, onSeek, onStampRequest
 
   useEffect(() => {
     if (!host.current) return
+    // A live proxy, so a command reads the playback position at the moment it
+    // runs rather than the one captured when the editor was created.
+    const ctx: NoteContext = {
+      now: () => cbs.current.context.now(),
+      transcriptQuote: () => cbs.current.context.transcriptQuote(),
+    }
 
     const v = new EditorView({
       state: EditorState.create({
         doc: initialValue,
         extensions: [
           history(),
+          // Highest, because `markdown()` binds Enter too and would otherwise
+          // hand this one another checkbox before we ever see the key.
+          Prec.highest(keymap.of([endEmptyItem])),
           keymap.of([
             {
               key: 'Alt-t',
@@ -109,16 +219,47 @@ export function NoteEditor({ ref, initialValue, onChange, onSeek, onStampRequest
                 return true
               },
             },
+            { key: 'Mod-b', preventDefault: true, run: (e) => (wrapSelection(e, '**'), true) },
+            { key: 'Mod-i', preventDefault: true, run: (e) => (wrapSelection(e, '*'), true) },
+            { key: 'Mod-1', preventDefault: true, run: (e) => (toggleLinePrefix(e, '# '), true) },
+            { key: 'Mod-2', preventDefault: true, run: (e) => (toggleLinePrefix(e, '## '), true) },
+            { key: 'Mod-3', preventDefault: true, run: (e) => (toggleLinePrefix(e, '### '), true) },
+            {
+              key: 'Mod-Shift-8',
+              preventDefault: true,
+              run: (e) => (toggleLinePrefix(e, '- '), true),
+            },
             ...defaultKeymap,
             ...historyKeymap,
           ]),
-          markdown(),
+          markdown({ base: markdownLanguage }),
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           EditorView.lineWrapping,
+          slashMenu(ctx),
+          richMarkdown,
           timestampHighlighter,
           theme,
           EditorView.updateListener.of((u) => {
             if (u.docChanged) cbs.current.onChange(u.state.doc.toString())
+            if (u.docChanged || u.selectionSet) {
+              const range = u.state.selection.main
+              const line = u.state.doc.lineAt(range.head).number
+              cbs.current.onOutline?.(outlineOf(u.state.doc.toString()), line)
+
+              // The floating bar follows the selection, and only exists while
+              // there is one — an always-on toolbar would eat height the pane
+              // does not have.
+              if (range.empty) setBar(null)
+              else {
+                const coords = u.view.coordsAtPos(range.from)
+                const box = u.view.dom.getBoundingClientRect()
+                setBar(
+                  coords
+                    ? { top: coords.top - box.top - 8, left: coords.left - box.left }
+                    : null,
+                )
+              }
+            }
           }),
           EditorView.domEventHandlers({
             mousedown(event) {
@@ -136,6 +277,7 @@ export function NoteEditor({ ref, initialValue, onChange, onSeek, onStampRequest
       parent: host.current,
     })
     view.current = v
+    cbs.current.onOutline?.(outlineOf(initialValue), 1)
     return () => {
       v.destroy()
       view.current = null
@@ -144,5 +286,38 @@ export function NoteEditor({ ref, initialValue, onChange, onSeek, onStampRequest
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return <div ref={host} style={{ height: '100%' }} />
+  return (
+    <div className="note-wrap">
+      <div ref={host} className="note-host" />
+      {bar && (
+        <div
+          className="note-bar"
+          style={{ top: Math.max(0, bar.top), left: Math.max(0, bar.left) }}
+          // mousedown, not click: the editor loses its selection on blur, and
+          // by click time there would be nothing left to format.
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {BAR.map((id) => {
+            const cmd = NOTE_COMMANDS.find((c) => c.id === id)
+            return cmd ? (
+              <button key={id} className="note-bar-btn" title={cmd.hint ?? cmd.label} onClick={() => runCommand(id)}>
+                {cmd.label}
+              </button>
+            ) : null
+          })}
+          <span className="note-bar-sep" />
+          {NOTE_MARKS.map((kind) => (
+            <button
+              key={kind}
+              className={`note-bar-btn is-${kind}`}
+              title={`標記為${kind}`}
+              onClick={() => runCommand(`mark-${kind}`)}
+            >
+              {kind}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }

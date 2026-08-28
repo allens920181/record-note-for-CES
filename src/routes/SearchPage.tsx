@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import { search } from '../schedule/search'
-import type { HitKind, SearchHit } from '../schedule/search'
+import { findMarks, search } from '../schedule/search'
+import type { HitKind, MarkHit, SearchHit } from '../schedule/search'
+import { NOTE_MARKS } from '../editor/marks'
+import type { NoteMark } from '../editor/marks'
 import { formatTime } from '../lib/time'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 
@@ -19,6 +21,10 @@ export function SearchPage() {
   const [courseId, setCourseId] = useState('')
   const [kinds, setKinds] = useState<HitKind[]>(['transcript', 'note', 'file'])
   const [hits, setHits] = useState<SearchHit[] | null>(null)
+  // Marks are their own question — "show me everything I flagged" is not a
+  // phrase search, and it wants whole blocks rather than sixty characters.
+  const [marks, setMarks] = useState<NoteMark[]>([])
+  const [found, setFound] = useState<MarkHit[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [elapsed, setElapsed] = useState(0)
 
@@ -61,6 +67,20 @@ export function SearchPage() {
       if (timer.current) window.clearTimeout(timer.current)
     }
   }, [query, courseId, kinds, run])
+
+  useEffect(() => {
+    let live = true
+    if (marks.length === 0) {
+      setFound(null)
+      return
+    }
+    void findMarks(marks, { courseId: courseId || undefined }).then((rows) => {
+      if (live) setFound(rows)
+    })
+    return () => {
+      live = false
+    }
+  }, [marks, courseId])
 
   function open(hit: SearchHit) {
     if (!hit.sessionId) {
@@ -132,6 +152,65 @@ export function SearchPage() {
             ))}
           </div>
         </div>
+
+        <div className="row" style={{ gap: '.4rem', alignItems: 'center', marginBottom: '1rem' }}>
+          <span className="small muted" style={{ flex: '0 0 auto' }}>
+            或整學期回顧你標記過的：
+          </span>
+          {NOTE_MARKS.map((kind) => (
+            <button
+              key={kind}
+              className={`btn sm${marks.includes(kind) ? ' primary' : ''}`}
+              style={{ flex: '0 0 auto' }}
+              onClick={() =>
+                setMarks((prev) =>
+                  prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind],
+                )
+              }
+            >
+              {kind}
+            </button>
+          ))}
+          {marks.length > 0 && (
+            <button
+              className="btn ghost sm"
+              style={{ flex: '0 0 auto' }}
+              onClick={() => setMarks([])}
+            >
+              收起
+            </button>
+          )}
+        </div>
+
+        {found !== null && (
+          <section className="card" style={{ marginBottom: '1.25rem' }}>
+            <h2>{marks.join('、')}</h2>
+            <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
+              {found.length === 0
+                ? '這些類型還沒有任何標記。在筆記裡選一段文字，用浮出的按鈕標一下就會出現在這裡。'
+                : `${found.length} 筆，最近的一週在最前面。`}
+            </p>
+            <div className="stack">
+              {found.map((m) => (
+                <button
+                  key={m.key}
+                  className="list-item hit"
+                  style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
+                  onClick={() => navigate(`/session/${m.sessionId}`)}
+                >
+                  <span className="swatch" style={{ background: m.courseColor }} />
+                  <span className="grow">
+                    <span className="sub">
+                      {m.courseName} · {m.label}
+                    </span>
+                    <span className="hit-snippet">{m.text}</span>
+                  </span>
+                  <span className={`tag mark-${m.kind}`}>{m.kind}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {busy && <div className="notice">搜尋中…</div>}
 
