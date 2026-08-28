@@ -406,7 +406,8 @@ export function SessionPage() {
             aria-expanded={showPlan}
             onClick={() => setPlanOpen(!showPlan)}
           >
-            本週進度{planTotal > 0 ? ` ${planDone}/${planTotal}` : ''}
+            {/* Spaced the same as every other count in the app. */}
+            本週進度{planTotal > 0 ? ` ${planDone} / ${planTotal}` : ''}
           </button>
         </div>
 

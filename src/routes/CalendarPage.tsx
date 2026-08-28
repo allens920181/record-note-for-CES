@@ -243,6 +243,12 @@ export function CalendarPage() {
             items={items}
             onPickDay={(date) => openDraft(date, null)}
             onOpenItem={(item) => setShownKey(item.key)}
+            onOpenDay={(date) => {
+              // The week grid is where a full day fits; jump there rather than
+              // growing one month cell out of the grid.
+              setAnchor(date)
+              setView('week')
+            }}
           />
         )}
       </main>

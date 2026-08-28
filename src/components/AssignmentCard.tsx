@@ -9,6 +9,7 @@ import {
 import type { Assignment, AssignmentStatus, Course, SubTask, WorkBlock } from '../db'
 import { ASSIGNMENT_STATUS_LABEL, SUBTASK_TEMPLATES } from '../db/schema'
 import { newId } from '../lib/id'
+import { ProgressTag } from './ProgressTag'
 import { TaskChecklist } from './TaskChecklist'
 import { describeDays, workloadOf } from '../schedule/workload'
 import type { Pressure } from '../schedule/workload'
@@ -68,11 +69,7 @@ export function AssignmentCard({
             <span className="mono">{a.due}</span> · {describeDays(load.daysLeft)}
           </div>
         </div>
-        {a.subtasks.length > 0 && (
-          <span className="tag">
-            {doneCount} / {a.subtasks.length}
-          </span>
-        )}
+        {a.subtasks.length > 0 && <ProgressTag done={doneCount} total={a.subtasks.length} />}
         {load.hoursNeeded > 0 && (
           // Short on hours is short on hours — an overdue item with 0h left
           // must not read green just because it isn't 'tight'.

@@ -12,9 +12,11 @@ interface Props {
   items: CalendarItem[]
   onPickDay: (date: string) => void
   onOpenItem: (item: CalendarItem) => void
+  /** Show everything on one day — the month grid only has room for three. */
+  onOpenDay: (date: string) => void
 }
 
-export function MonthCalendar({ anchor, items, onPickDay, onOpenItem }: Props) {
+export function MonthCalendar({ anchor, items, onPickDay, onOpenItem, onOpenDay }: Props) {
   const gridStart = startOfMonthGrid(anchor)
   const month = monthOf(anchor)
   const today = todayISO()
@@ -75,7 +77,20 @@ export function MonthCalendar({ anchor, items, onPickDay, onOpenItem }: Props) {
                   {item.title}
                 </button>
               ))}
-              {hidden > 0 && <span className="mo-more">還有 {hidden} 項</span>}
+              {hidden > 0 && (
+                // It used to be plain text, so a busy day simply withheld the
+                // rest with no way to ask for them.
+                <button
+                  className="mo-more"
+                  title={`看 ${day} 這一天的全部行程`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenDay(day)
+                  }}
+                >
+                  還有 {hidden} 項 →
+                </button>
+              )}
             </div>
           )
         })}

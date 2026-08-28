@@ -27,6 +27,8 @@ import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
 import { TimeField } from '../components/TimeField'
 import { GlossaryChips } from '../components/GlossaryChips'
+import { ProgressTag } from '../components/ProgressTag'
+import { BlurField } from '../components/BlurField'
 import { TimeBlockDialog, createTimeBlock, makeDraft } from '../components/TimeBlockDialog'
 import type { TimeBlockDraft } from '../components/TimeBlockDialog'
 import { useConfirm } from '../components/ConfirmProvider'
@@ -341,14 +343,17 @@ export function CoursePage() {
                     )}
                     {state?.noted.has(s.id) && <span className="tag ok">有筆記</span>}
                     {!s.canceled && (
-                      <span
-                        className={`tag${planState === 'done' ? ' ok' : planState === 'unplanned-past' ? ' warn' : ''}`}
+                      <ProgressTag
+                        done={planDone}
+                        total={items.length}
+                        hoursLeft={planLeft}
+                        label="進度"
+                        emptyLabel="未排進度"
+                        tone={
+                          planState === 'done' ? 'ok' : planState === 'unplanned-past' ? 'warn' : undefined
+                        }
                         title="本週進度"
-                      >
-                        {items.length === 0
-                          ? '未排進度'
-                          : `進度 ${planDone}/${items.length}${planLeft > 0 ? ` · ${planLeft}h` : ''}`}
-                      </span>
+                      />
                     )}
                     <button
                       className="btn ghost sm"
@@ -467,12 +472,11 @@ export function CoursePage() {
                       />
                       <div className="field" style={{ flex: '1 1 7rem', marginBottom: 0 }}>
                         <label htmlFor={`rm-${i}`}>教室</label>
-                        <input
+                        <BlurField
                           id={`rm-${i}`}
-                          type="text"
                           value={slot.room ?? ''}
-                          onChange={(e) =>
-                            patchSlots(slots.map((s, j) => (j === i ? { ...s, room: e.target.value } : s)))
+                          onCommit={(v) =>
+                            patchSlots(slots.map((s, j) => (j === i ? { ...s, room: v } : s)))
                           }
                         />
                       </div>

@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { WEEKDAY_LABELS, addWorkBlock, db, deleteWorkBlock, sumWorkHours, updateWorkBlock } from '../db'
 import type { Recurrence, WorkBlock } from '../db'
 import { hoursBetween } from '../lib/time'
+import { BlurField } from './BlurField'
 import { TimeField } from './TimeField'
 
 interface Props {
@@ -126,12 +127,11 @@ export function WorkBlockEditor({ courseId, termWeeks, defaultDate }: Props) {
               />
               <div className="field" style={{ flex: '1 1 8rem', marginBottom: 0 }}>
                 <label htmlFor={`wn-${block.id}`}>備註</label>
-                <input
+                <BlurField
                   id={`wn-${block.id}`}
-                  type="text"
                   placeholder="期末報告"
                   value={block.note ?? ''}
-                  onChange={(e) => patch(block, { note: e.target.value })}
+                  onCommit={(v) => patch(block, { note: v })}
                 />
               </div>
               <span className="slot-hours mono">{hoursBetween(block.start, block.end)} 小時</span>

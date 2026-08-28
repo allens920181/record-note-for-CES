@@ -4,6 +4,7 @@ import { db, saveWeekPlan } from '../db'
 import type { PlanItem } from '../db/schema'
 import { PLAN_TEMPLATES, READING_STATUS_LABEL } from '../db/schema'
 import { newId } from '../lib/id'
+import { ProgressTag } from './ProgressTag'
 import { TaskChecklist } from './TaskChecklist'
 import type { ChecklistItem } from './TaskChecklist'
 
@@ -82,10 +83,7 @@ export function WeekPlanPanel({ sessionId, courseId, compact }: Props) {
       <div className="grade-head">
         <h2 style={{ margin: 0, fontSize: compact ? '.95rem' : undefined }}>本週進度</h2>
         {items.length > 0 && (
-          <span className={`tag${done === items.length ? ' ok' : ''}`}>
-            {done} / {items.length}
-            {hoursLeft > 0 && ` · 還要 ${hoursLeft} 小時`}
-          </span>
+          <ProgressTag done={done} total={items.length} hoursLeft={hoursLeft} />
         )}
       </div>
 

@@ -414,7 +414,12 @@ a.list-item:hover { border-color: var(--accent); }
 .mo-cell.is-today { background: var(--accent-wash); }
 .mo-num { font-size: .72rem; color: var(--muted); }
 .mo-cell.is-today .mo-num { color: var(--accent-ink); font-weight: 500; }
-.mo-more { font-size: .68rem; color: var(--muted); padding-left: .2rem; }
+.mo-more {
+  font: inherit; font-size: .68rem; color: var(--muted); text-align: left;
+  padding: .05rem .2rem; background: none; border: none; border-radius: 3px;
+  cursor: pointer; width: 100%;
+}
+.mo-more:hover { color: var(--accent-ink); background: var(--surface-2); }
 
 @media (max-width: 46rem) {
   .wk-head, .wk-allday, .wk-body { grid-template-columns: 2.6rem repeat(7, minmax(3.4rem, 1fr)); }

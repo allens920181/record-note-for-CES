@@ -7,6 +7,7 @@ import { READING_STATUS_LABEL } from '../db/schema'
 import type { ReadingStatus } from '../db/schema'
 import { addAttachment, readAttachment, removeAttachment } from '../files/attachments'
 import { formatBytes } from '../lib/time'
+import { BlurField } from './BlurField'
 import { PdfViewer } from './PdfViewer'
 import { useConfirm } from './ConfirmProvider'
 
@@ -213,29 +214,25 @@ export function ReadingList({ courseId }: Props) {
                       </div>
                       <div className="field">
                         <label htmlFor={`rp-${r.id}`}>讀到第幾頁</label>
-                        <input
+                        <BlurField
                           id={`rp-${r.id}`}
                           type="number"
                           min={0}
-                          value={r.pagesRead ?? ''}
-                          onChange={(e) =>
-                            void updateReading(r.id, {
-                              pagesRead: e.target.value ? Number(e.target.value) : undefined,
-                            })
+                          value={r.pagesRead === undefined ? '' : String(r.pagesRead)}
+                          onCommit={(v) =>
+                            void updateReading(r.id, { pagesRead: v ? Number(v) : undefined })
                           }
                         />
                       </div>
                       <div className="field">
                         <label htmlFor={`rn-${r.id}`}>總頁數</label>
-                        <input
+                        <BlurField
                           id={`rn-${r.id}`}
                           type="number"
                           min={0}
-                          value={r.totalPages ?? ''}
-                          onChange={(e) =>
-                            void updateReading(r.id, {
-                              totalPages: e.target.value ? Number(e.target.value) : undefined,
-                            })
+                          value={r.totalPages === undefined ? '' : String(r.totalPages)}
+                          onCommit={(v) =>
+                            void updateReading(r.id, { totalPages: v ? Number(v) : undefined })
                           }
                         />
                       </div>
