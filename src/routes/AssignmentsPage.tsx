@@ -1,40 +1,18 @@
 import { useMemo, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import {
-  createAssignment,
-  db,
-  deleteAssignment,
-  makeSubTasks,
-  todayISO,
-  updateAssignment,
-} from '../db'
-import type { Assignment, AssignmentStatus, SubTask, WorkBlock } from '../db'
-import { ASSIGNMENT_STATUS_LABEL, SUBTASK_TEMPLATES } from '../db/schema'
-import { describeDays, workloadOf } from '../schedule/workload'
-import type { Pressure } from '../schedule/workload'
+import { db } from '../db'
+import type { WorkBlock } from '../db'
 import { Breadcrumbs, TopBar } from '../components/Layout'
-import { Modal } from '../components/Modal'
 import { TermPicker, useTermChoice } from '../components/TermPicker'
-import { TimeField } from '../components/TimeField'
-import { useConfirm } from '../components/ConfirmProvider'
-
-const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
-  done: { cls: 'ok', label: '已完成' },
-  overdue: { cls: 'err', label: '已逾期' },
-  tight: { cls: 'err', label: '時間不夠' },
-  ok: { cls: 'ok', label: '時間夠' },
-  unknown: null,
-}
+import { AssignmentCard, NewAssignmentDialog } from '../components/AssignmentCard'
 
 export function AssignmentsPage() {
-  const ask = useConfirm()
   const { hash } = useLocation()
   const [urlParams] = useSearchParams()
   const [showDone, setShowDone] = useState(false)
   const [open, setOpen] = useState<string | null>(hash ? hash.slice(1) : null)
-  const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ courseId: '', title: '', due: todayISO() })
+  const [creating, setCreating] = useState<string | null>(null)
 
   const { termId: remembered, setTermId, terms } = useTermChoice()
   // A deadline opened from the calendar names its own term; without that the
@@ -76,22 +54,13 @@ export function AssignmentsPage() {
 
   const courseById = useMemo(() => new Map((courses ?? []).map((c) => [c.id, c])), [courses])
 
-  const rows = useMemo(() => {
-    const list = (assignments ?? []).filter((a) => showDone || a.status !== 'done')
-    return list
-      .map((a) => ({ a, load: workloadOf(a, blocksByCourse.get(a.courseId) ?? []) }))
-      .sort((x, y) => x.a.due.localeCompare(y.a.due) || x.a.title.localeCompare(y.a.title))
-  }, [assignments, blocksByCourse, showDone])
-
-  async function submitNew() {
-    const title = form.title.trim()
-    const courseId = form.courseId || courses?.[0]?.id
-    if (!title || !courseId) return
-    const id = await createAssignment({ courseId, title, due: form.due })
-    setForm({ courseId, title: '', due: form.due })
-    setCreating(false)
-    setOpen(id)
-  }
+  const rows = useMemo(
+    () =>
+      (assignments ?? [])
+        .filter((a) => showDone || a.status !== 'done')
+        .sort((x, y) => x.due.localeCompare(y.due) || x.title.localeCompare(y.title)),
+    [assignments, showDone],
+  )
 
   return (
     <>
@@ -130,10 +99,7 @@ export function AssignmentsPage() {
             className="btn primary"
             style={{ flex: '0 0 auto' }}
             disabled={!courses?.length}
-            onClick={() => {
-              setForm({ courseId: courseFilter || courses?.[0]?.id || '', title: '', due: todayISO() })
-              setCreating(true)
-            }}
+            onClick={() => setCreating(courseFilter || courses?.[0]?.id || '')}
           >
             新增作業
           </button>
@@ -179,10 +145,7 @@ export function AssignmentsPage() {
                 <p>這個學期還沒有任何作業。</p>
                 <button
                   className="btn primary"
-                  onClick={() => {
-                    setForm({ courseId: courseFilter || courses[0].id, title: '', due: todayISO() })
-                    setCreating(true)
-                  }}
+                  onClick={() => setCreating(courseFilter || courses[0].id)}
                 >
                   新增作業
                 </button>
@@ -198,316 +161,32 @@ export function AssignmentsPage() {
           </div>
         ) : (
           <div className="stack">
-            {rows.map(({ a, load }) => {
-              const course = courseById.get(a.courseId)
-              const tag = PRESSURE_TAG[load.pressure]
-              const doneCount = a.subtasks.filter((t) => t.done).length
-              return (
-                <div key={a.id} className="card asg" id={a.id}>
-                  <div className="asg-head" onClick={() => setOpen(open === a.id ? null : a.id)}>
-                    <span
-                      className="swatch"
-                      style={{ background: course?.color ?? 'var(--line-strong)' }}
-                    />
-                    <div className="grow">
-                      <div className="title">{a.title}</div>
-                      <div className="sub">
-                        {course?.name ?? '—'} · <span className="mono">{a.due}</span> ·{' '}
-                        {describeDays(load.daysLeft)}
-                      </div>
-                    </div>
-                    {a.subtasks.length > 0 && (
-                      <span className="tag">
-                        {doneCount} / {a.subtasks.length}
-                      </span>
-                    )}
-                    {load.hoursNeeded > 0 && (
-                      // Short on hours is short on hours — an overdue item with
-                      // 0h left must not read green just because it isn't 'tight'.
-                      <span
-                        className={`tag ${
-                          load.hoursAvailable < load.hoursNeeded && a.status !== 'done' ? 'err' : 'ok'
-                        }`}
-                      >
-                        需 {load.hoursNeeded}h / 有 {load.hoursAvailable}h
-                      </span>
-                    )}
-                    {tag && <span className={`tag ${tag.cls}`}>{tag.label}</span>}
-                    <span className="tag">{ASSIGNMENT_STATUS_LABEL[a.status]}</span>
-                    <button className="btn ghost sm">{open === a.id ? '收合' : '展開'}</button>
-                  </div>
-
-                  {open === a.id && (
-                    <AssignmentDetail
-                      assignment={a}
-                      hoursAvailable={load.hoursAvailable}
-                      onDelete={async () => {
-                        const go = await ask({
-                          title: `刪除作業「${a.title}」？`,
-                          danger: true,
-                          confirmLabel: '刪除這份作業',
-                          body: `拆解出來的 ${a.subtasks.length} 個步驟也會一起消失。`,
-                        })
-                        if (go) await deleteAssignment(a.id)
-                      }}
-                    />
-                  )}
-                </div>
-              )
-            })}
+            {rows.map((a) => (
+              <AssignmentCard
+                key={a.id}
+                assignment={a}
+                course={courseById.get(a.courseId)}
+                blocks={blocksByCourse.get(a.courseId) ?? []}
+                open={open === a.id}
+                onToggle={() => setOpen(open === a.id ? null : a.id)}
+              />
+            ))}
           </div>
         )}
       </main>
 
-      {creating && (
-        <Modal
-          title="新增作業"
-          onClose={() => setCreating(false)}
-          onSubmit={submitNew}
-          submitLabel="建立"
-          submitDisabled={!form.title.trim()}
-        >
-          <div className="field">
-            <label htmlFor="a-title">作業名稱</label>
-            <input
-              id="a-title"
-              type="text"
-              autoFocus
-              placeholder="期末報告：加爾文的預定論"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-          </div>
-          <div className="row">
-            <div className="field">
-              <label htmlFor="a-course">課程</label>
-              <select
-                id="a-course"
-                value={form.courseId}
-                onChange={(e) => setForm({ ...form, courseId: e.target.value })}
-              >
-                {(courses ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="a-due">截止日</label>
-              <input
-                id="a-due"
-                type="date"
-                value={form.due}
-                onChange={(e) => setForm({ ...form, due: e.target.value })}
-              />
-            </div>
-          </div>
-        </Modal>
+      {creating !== null && (
+        <NewAssignmentDialog
+          courses={courses ?? []}
+          courseId={creating}
+          onClose={() => setCreating(null)}
+          onCreated={(id) => {
+            setCreating(null)
+            setOpen(id)
+          }}
+        />
       )}
     </>
   )
 }
 
-function AssignmentDetail({
-  assignment,
-  hoursAvailable,
-  onDelete,
-}: {
-  assignment: Assignment
-  hoursAvailable: number
-  onDelete: () => void
-}) {
-  const [newTask, setNewTask] = useState('')
-
-  function patchTasks(subtasks: SubTask[]) {
-    void updateAssignment(assignment.id, { subtasks })
-  }
-
-  const needed = assignment.subtasks
-    .filter((t) => !t.done)
-    .reduce((s, t) => s + (t.estimateHours ?? 0), 0)
-
-  return (
-    <div className="asg-detail">
-      <div className="row">
-        <div className="field">
-          <label htmlFor={`st-${assignment.id}`}>狀態</label>
-          <select
-            id={`st-${assignment.id}`}
-            value={assignment.status}
-            onChange={(e) =>
-              void updateAssignment(assignment.id, {
-                status: e.target.value as AssignmentStatus,
-              })
-            }
-          >
-            {(Object.keys(ASSIGNMENT_STATUS_LABEL) as AssignmentStatus[]).map((k) => (
-              <option key={k} value={k}>
-                {ASSIGNMENT_STATUS_LABEL[k]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor={`due-${assignment.id}`}>截止日</label>
-          <input
-            id={`due-${assignment.id}`}
-            type="date"
-            value={assignment.due}
-            onChange={(e) => void updateAssignment(assignment.id, { due: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor={`dt-${assignment.id}`}>截止時間</label>
-          <TimeField
-            id={`dt-${assignment.id}`}
-            value={assignment.dueTime ?? ''}
-            allowEmpty
-            onChange={(v) => void updateAssignment(assignment.id, { dueTime: v || undefined })}
-          />
-        </div>
-      </div>
-
-      <div className="field">
-        <label htmlFor={`n-${assignment.id}`}>要求與備註</label>
-        <textarea
-          id={`n-${assignment.id}`}
-          rows={3}
-          placeholder="3000 字、Turabian 格式、至少五筆學術文獻"
-          defaultValue={assignment.notes}
-          onBlur={(e) => void updateAssignment(assignment.id, { notes: e.target.value })}
-        />
-      </div>
-
-      <h3 style={{ marginTop: '1.2rem' }}>拆解步驟</h3>
-      {assignment.subtasks.length === 0 ? (
-        <p className="small muted" style={{ margin: '.3rem 0 .7rem' }}>
-          還沒拆解。可以直接套一個範本：
-        </p>
-      ) : (
-        <div className="stack" style={{ margin: '.6rem 0' }}>
-          {assignment.subtasks.map((task, i) => (
-            <div key={task.id} className="row subtask" style={{ gap: '.5rem', alignItems: 'center' }}>
-              <input
-                type="checkbox"
-                checked={task.done}
-                style={{ width: '1rem', flex: '0 0 auto' }}
-                onChange={(e) =>
-                  patchTasks(
-                    assignment.subtasks.map((t, j) =>
-                      j === i ? { ...t, done: e.target.checked } : t,
-                    ),
-                  )
-                }
-              />
-              <input
-                type="text"
-                className="grow"
-                value={task.title}
-                onChange={(e) =>
-                  patchTasks(
-                    assignment.subtasks.map((t, j) =>
-                      j === i ? { ...t, title: e.target.value } : t,
-                    ),
-                  )
-                }
-              />
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                placeholder="時數"
-                style={{ flex: '0 0 5.5rem' }}
-                value={task.estimateHours ?? ''}
-                onChange={(e) =>
-                  patchTasks(
-                    assignment.subtasks.map((t, j) =>
-                      j === i
-                        ? { ...t, estimateHours: e.target.value ? Number(e.target.value) : undefined }
-                        : t,
-                    ),
-                  )
-                }
-              />
-              <button
-                className="btn danger sm"
-                style={{ flex: '0 0 auto' }}
-                onClick={() => patchTasks(assignment.subtasks.filter((_, j) => j !== i))}
-              >
-                移除
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="row" style={{ gap: '.5rem', marginBottom: '.8rem' }}>
-        {SUBTASK_TEMPLATES.map((t) => (
-          <button
-            key={t.name}
-            className="btn sm"
-            style={{ flex: '0 0 auto' }}
-            onClick={() => patchTasks([...assignment.subtasks, ...makeSubTasks(t.steps)])}
-          >
-            套用「{t.name}」
-          </button>
-        ))}
-      </div>
-
-      <div className="row" style={{ gap: '.5rem' }}>
-        <input
-          type="text"
-          className="grow"
-          placeholder="再加一個步驟"
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' || !newTask.trim()) return
-            e.preventDefault()
-            patchTasks([...assignment.subtasks, ...makeSubTasks([newTask.trim()])])
-            setNewTask('')
-          }}
-        />
-        <button
-          className="btn"
-          style={{ flex: '0 0 auto' }}
-          disabled={!newTask.trim()}
-          onClick={() => {
-            patchTasks([...assignment.subtasks, ...makeSubTasks([newTask.trim()])])
-            setNewTask('')
-          }}
-        >
-          加入
-        </button>
-      </div>
-
-      <div className="notice" style={{ marginTop: '1rem' }}>
-        {needed > 0 ? (
-          <>
-            剩下的步驟預估需要 <strong>{needed} 小時</strong>，
-            到截止日為止這門課排了 <strong>{hoursAvailable} 小時</strong>作業時間。
-            {hoursAvailable < needed && (
-              <span style={{ color: 'var(--danger)' }}>
-                {' '}
-                差 {Math.round((needed - hoursAvailable) * 10) / 10} 小時——
-                要嘛在<Link to="/calendar">行事曆</Link>多排時間，要嘛把範圍縮小。
-              </span>
-            )}
-          </>
-        ) : (
-          <>
-            替步驟填上預估時數，就能知道到截止日為止的{' '}
-            <strong>{hoursAvailable} 小時</strong>作業時間夠不夠。
-          </>
-        )}
-      </div>
-
-      <div className="row" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
-        <button className="btn danger sm" style={{ flex: '0 0 auto' }} onClick={onDelete}>
-          刪除這份作業
-        </button>
-      </div>
-    </div>
-  )
-}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
@@ -28,6 +28,7 @@ import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
 import { TimeField } from '../components/TimeField'
 import { useConfirm } from '../components/ConfirmProvider'
+import { AssignmentCard, NewAssignmentDialog } from '../components/AssignmentCard'
 
 type Tab = 'sessions' | 'setup' | 'work' | 'require'
 const TABS: string[] = ['sessions', 'setup', 'work', 'require']
@@ -55,6 +56,8 @@ export function CoursePage() {
   const [adding, setAdding] = useState<MeetingKind | null>(null)
   const [addDate, setAddDate] = useState(todayISO())
   const [courseDraft, setCourseDraft] = useState<CourseDraft | null>(null)
+  const [openAssignment, setOpenAssignment] = useState<string | null>(null)
+  const [creatingAssignment, setCreatingAssignment] = useState(false)
 
   // `?? null` so a missing row is distinguishable from a pending read: Dexie
   // returns undefined for both, which left the "找不到" branch unreachable and
@@ -72,6 +75,10 @@ export function CoursePage() {
     () => db.workBlocks.where('courseId').equals(courseId).toArray(),
     [courseId],
   )
+  const assignments = useLiveQuery(
+    () => db.assignments.where('courseId').equals(courseId).toArray(),
+    [courseId],
+  )
   const state = useLiveQuery(async () => {
     const ids = (await db.sessions.where('courseId').equals(courseId).primaryKeys()) as string[]
     const [scribed, notes, plans] = await Promise.all([
@@ -87,6 +94,15 @@ export function CoursePage() {
       plans: new Map(plans.map((p) => [p.sessionId, p.items])),
     }
   }, [courseId])
+
+  // Hooks must run on every render, so this sits above the early returns.
+  const dueList = useMemo(
+    () =>
+      [...(assignments ?? [])].sort(
+        (a, b) => a.due.localeCompare(b.due) || a.title.localeCompare(b.title),
+      ),
+    [assignments],
+  )
 
   if (course === undefined)
     return (
@@ -558,12 +574,52 @@ export function CoursePage() {
 
         {tab === 'work' && (
           <>
-            <section className="card" style={{ marginBottom: '1.25rem' }}>
-              <h2>這門課的作業</h2>
-              <p className="small muted" style={{ margin: '.3rem 0 .6rem' }}>
-                所有課程的作業一起看、依截止日排序，在{' '}
-                <Link to="/assignments">作業頁</Link>。
-              </p>
+            <section style={{ marginBottom: '1.25rem' }}>
+              <div className="page-head" style={{ marginBottom: '.6rem' }}>
+                <div className="grow">
+                  <h2>這門課的作業</h2>
+                  <p className="small muted" style={{ margin: '.3rem 0 0' }}>
+                    依截止日排序。所有課程一起看在{' '}
+                    <Link to="/assignments">作業頁</Link>。
+                  </p>
+                </div>
+                <button
+                  className="btn primary"
+                  style={{ flex: '0 0 auto' }}
+                  onClick={() => setCreatingAssignment(true)}
+                >
+                  新增作業
+                </button>
+              </div>
+
+              {assignments === undefined ? (
+                <div className="empty">載入中…</div>
+              ) : dueList.length === 0 ? (
+                <div className="empty">
+                  <p>這門課還沒有作業。</p>
+                  <button className="btn primary" onClick={() => setCreatingAssignment(true)}>
+                    新增作業
+                  </button>
+                </div>
+              ) : (
+                <div className="stack">
+                  {dueList.map((a) => (
+                    <AssignmentCard
+                      key={a.id}
+                      assignment={a}
+                      course={course}
+                      blocks={workBlocks ?? []}
+                      open={openAssignment === a.id}
+                      onToggle={() =>
+                        setOpenAssignment(openAssignment === a.id ? null : a.id)
+                      }
+                      // Every row here is this course's; naming it each time
+                      // says nothing and pushes the date out of the line.
+                      showCourse={false}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
             <ReadingList courseId={courseId} />
           </>
@@ -590,6 +646,18 @@ export function CoursePage() {
         >
           <CourseForm value={courseDraft} onChange={setCourseDraft} showColor />
         </Modal>
+      )}
+
+      {creatingAssignment && (
+        <NewAssignmentDialog
+          courses={[course]}
+          courseId={courseId}
+          onClose={() => setCreatingAssignment(false)}
+          onCreated={(id) => {
+            setCreatingAssignment(false)
+            setOpenAssignment(id)
+          }}
+        />
       )}
 
       {adding && (
