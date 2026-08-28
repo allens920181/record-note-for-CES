@@ -53,6 +53,9 @@ export function TermPage() {
         code: draft.code.trim(),
         credits: draft.credits,
         color: COURSE_COLORS[(courses?.length ?? 0) % COURSE_COLORS.length],
+        // Said once, here: a new course used to be created without a time and
+        // then need a second errand on another screen to acquire one.
+        slots: draft.slots,
       })
     }
     setDraft(EMPTY_COURSE)
@@ -190,6 +193,7 @@ export function TermPage() {
                       code: c.code,
                       credits: c.credits,
                       color: c.color,
+                      slots: c.slots,
                     })
                     setEditing(c.id)
                     setCreating(true)
@@ -205,6 +209,7 @@ export function TermPage() {
 
       {creating && (
         <Modal
+          wide
           title={editing ? '編輯課程' : '新增課程'}
           onClose={() => {
             setCreating(false)

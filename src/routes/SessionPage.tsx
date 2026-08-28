@@ -288,7 +288,7 @@ export function SessionPage() {
       learned
         ? `同樣的修正出現第二次了，已把「${learned}」加入詞彙表。`
         : recorded
-          ? '已記錄這次修正，可到課程頁的「課程設定」挑出要記住的詞。'
+          ? '已記錄這次修正，可到課程頁的「詞彙表」挑出要記住的詞。'
           : null,
     )
   }

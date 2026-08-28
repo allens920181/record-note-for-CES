@@ -123,9 +123,9 @@ export function CalendarPage() {
     if (item.assignmentId)
       navigate(`/assignments?term=${activeTermId ?? ''}#${item.assignmentId}`)
     else if (item.sessionId) navigate(`/session/${item.sessionId}`)
-    // Study time lives on the setup tab; landing on 週次 showed a page with no
-    // sign of the thing that was clicked.
-    else navigate(`/course/${item.courseId}?tab=setup`)
+    // Study time lives beside the assignments it is there to make room for;
+    // landing on 週次 showed a page with no sign of the thing that was clicked.
+    else navigate(`/course/${item.courseId}?tab=work`)
   }
 
   async function submitDraft() {

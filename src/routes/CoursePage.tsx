@@ -12,9 +12,7 @@ import {
   sumWorkHours,
   todayISO,
 } from '../db'
-import type { ClassSlot } from '../db'
-import { MEETING_KINDS, MEETING_KIND_LABEL, SESSION_KIND_LABEL } from '../db/schema'
-import type { MeetingKind } from '../db/schema'
+import { SESSION_KIND_LABEL } from '../db/schema'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { AttachmentList } from '../components/AttachmentList'
 import { WorkBlockEditor } from '../components/WorkBlockEditor'
@@ -25,10 +23,8 @@ import { ProgressOverview } from '../components/ProgressOverview'
 import { Modal } from '../components/Modal'
 import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
-import { TimeField } from '../components/TimeField'
 import { GlossaryChips } from '../components/GlossaryChips'
 import { ProgressTag } from '../components/ProgressTag'
-import { BlurField } from '../components/BlurField'
 import { TimeBlockDialog, createTimeBlock, makeDraft } from '../components/TimeBlockDialog'
 import type { TimeBlockDraft } from '../components/TimeBlockDialog'
 import { useConfirm } from '../components/ConfirmProvider'
@@ -129,10 +125,6 @@ export function CoursePage() {
   const hours = sumWorkHours(workBlocks ?? [], term?.weeks ?? 0)
   const today = todayISO()
 
-  async function patchSlots(next: ClassSlot[]) {
-    await db.courses.update(courseId, { slots: next })
-  }
-
   async function generate() {
     setMessage(null)
     try {
@@ -149,6 +141,19 @@ export function CoursePage() {
     } catch (err) {
       setMessage({ kind: 'err', text: err instanceof Error ? err.message : String(err) })
     }
+  }
+
+  /** Opens the course dialog, which is where the weekly timetable lives. */
+  function editCourse() {
+    if (!course) return
+    setCourseDraft({
+      name: course.name,
+      teacher: course.teacher,
+      code: course.code,
+      credits: course.credits,
+      color: course.color,
+      slots: course.slots,
+    })
   }
 
   function openAdd() {
@@ -198,15 +203,7 @@ export function CoursePage() {
           <button
             className="btn"
             style={{ flex: '0 0 auto' }}
-            onClick={() => {
-              setCourseDraft({
-                name: course.name,
-                teacher: course.teacher,
-                code: course.code,
-                credits: course.credits,
-                color: course.color,
-              })
-            }}
+            onClick={editCourse}
           >
             編輯課程
           </button>
@@ -233,7 +230,7 @@ export function CoursePage() {
             大綱與規定
           </button>
           <button className={`tab${tab === 'setup' ? ' active' : ''}`} onClick={() => setTab('setup')}>
-            課程設定
+            詞彙表
           </button>
         </div>
 
@@ -266,7 +263,7 @@ export function CoursePage() {
                 sessions.length > 0 && (
                   <span className="small muted" style={{ flex: '0 0 auto', alignSelf: 'center' }}>
                     還沒有每週固定的時段，
-                    <button className="linkish" onClick={() => setTab('setup')}>
+                    <button className="linkish" onClick={editCourse}>
                       去設課表
                     </button>
                     後就能一次產生整學期。
@@ -287,7 +284,7 @@ export function CoursePage() {
                   每週都上的課先設好課表，就能一次產生整學期。
                 </p>
                 {slots.length === 0 ? (
-                  <button className="btn primary" onClick={() => setTab('setup')}>
+                  <button className="btn primary" onClick={editCourse}>
                     去設定課表
                   </button>
                 ) : (
@@ -388,144 +385,6 @@ export function CoursePage() {
 
         {tab === 'setup' && (
           <>
-            {/* ── recurring meetings ────────────────────────────── */}
-            <section className="card" style={{ marginBottom: '1.25rem' }}>
-              <h2>每週課表</h2>
-
-              {/* The explanation lives in the empty state, which is the one
-                  moment it is needed. Above a filled list it made this card
-                  the same weight as every other one on the page. */}
-              {slots.length === 0 ? (
-                <div className="empty" style={{ padding: '1.25rem', marginBottom: '.9rem' }}>
-                  <p style={{ margin: 0 }}>還沒有固定時段。</p>
-                  {/* Left-aligned: a centred paragraph that wraps to three
-                      lines gives the eye a new starting point on each one. */}
-                  <p
-                    className="small muted"
-                    style={{ margin: '.5rem auto 0', maxWidth: '32rem', textAlign: 'left' }}
-                  >
-                    只放<strong>每週都會上</strong>的課。正課和分組討論各自每週開一個檔案——
-                    兩場是分開的錄音，時間軸沒辦法合併，但同一週共用同一個週次編號。
-                    只上一次的課不必寫在這裡，到「上課週次」用「新增一堂課」挑日期就好。
-                  </p>
-                </div>
-              ) : (
-                <div className="stack" style={{ marginBottom: '.9rem' }}>
-                  {slots.map((slot, i) => (
-                    <div key={i} className="row slot-row" style={{ gap: '.5rem', alignItems: 'flex-end' }}>
-                      <div className="field" style={{ flex: '0 0 8rem', marginBottom: 0 }}>
-                        <label htmlFor={`kd-${i}`}>類型</label>
-                        <select
-                          id={`kd-${i}`}
-                          value={slot.kind ?? 'lecture'}
-                          onChange={(e) =>
-                            patchSlots(
-                              slots.map((sl, j) =>
-                                j === i ? { ...sl, kind: e.target.value as MeetingKind } : sl,
-                              ),
-                            )
-                          }
-                        >
-                          {MEETING_KINDS.map((k) => (
-                            <option key={k} value={k}>
-                              {MEETING_KIND_LABEL[k]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field" style={{ flex: '0 0 7rem', marginBottom: 0 }}>
-                        <label htmlFor={`wd-${i}`}>星期</label>
-                        <select
-                          id={`wd-${i}`}
-                          value={slot.weekday}
-                          onChange={(e) =>
-                            patchSlots(
-                              slots.map((s, j) =>
-                                j === i ? { ...s, weekday: Number(e.target.value) } : s,
-                              ),
-                            )
-                          }
-                        >
-                          {WEEKDAY_LABELS.map((label, wd) => (
-                            <option key={wd} value={wd}>
-                              週{label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <TimeField
-                        id={`st-${i}`}
-                        label="開始"
-                        value={slot.start}
-                        onChange={(v) =>
-                          patchSlots(slots.map((s, j) => (j === i ? { ...s, start: v } : s)))
-                        }
-                        style={{ flex: '1 1 6rem' }}
-                      />
-                      <TimeField
-                        id={`en-${i}`}
-                        label="結束"
-                        value={slot.end}
-                        onChange={(v) =>
-                          patchSlots(slots.map((s, j) => (j === i ? { ...s, end: v } : s)))
-                        }
-                        style={{ flex: '1 1 6rem' }}
-                      />
-                      <div className="field" style={{ flex: '1 1 7rem', marginBottom: 0 }}>
-                        <label htmlFor={`rm-${i}`}>教室</label>
-                        <BlurField
-                          id={`rm-${i}`}
-                          value={slot.room ?? ''}
-                          onCommit={(v) =>
-                            patchSlots(slots.map((s, j) => (j === i ? { ...s, room: v } : s)))
-                          }
-                        />
-                      </div>
-                      <button
-                        className="btn danger sm"
-                        style={{ flex: '0 0 auto' }}
-                        onClick={() => patchSlots(slots.filter((_, j) => j !== i))}
-                      >
-                        移除
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="row" style={{ gap: '.6rem' }}>
-                {/* The row that appears already carries a 類型 select, so a
-                    button per kind was two ways to reach the same row. */}
-                <button
-                  className="btn"
-                  style={{ flex: '0 0 auto' }}
-                  onClick={() =>
-                    patchSlots([
-                      ...slots,
-                      { weekday: 2, start: '19:00', end: '22:00', kind: 'lecture' },
-                    ])
-                  }
-                >
-                  新增上課時段
-                </button>
-                <button
-                  className="btn primary"
-                  style={{ flex: '0 0 auto' }}
-                  disabled={slots.length === 0}
-                  onClick={generate}
-                >
-                  依課表產生整學期
-                </button>
-              </div>
-            </section>
-
-            <WorkBlockEditor
-              courseId={courseId}
-              termWeeks={term?.weeks ?? 0}
-              defaultDate={term?.startDate ?? todayISO()}
-            />
-
-            {/* ── glossary ──────────────────────────────────────── */}
             <section className="card" style={{ marginBottom: '1.25rem' }}>
               <h2>專有名詞表</h2>
               <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
@@ -542,9 +401,9 @@ export function CoursePage() {
             </section>
 
             <CorrectionsPanel courseId={courseId} />
-
           </>
         )}
+
         {tab === 'require' && (
           <>
             <RequirementsPanel courseId={courseId} />
@@ -603,6 +462,11 @@ export function CoursePage() {
                 </div>
               )}
             </section>
+            <WorkBlockEditor
+              courseId={courseId}
+              termWeeks={term?.weeks ?? 0}
+              defaultDate={term?.startDate ?? todayISO()}
+            />
             <ReadingList courseId={courseId} />
           </>
         )}
@@ -610,6 +474,7 @@ export function CoursePage() {
 
       {courseDraft && (
         <Modal
+          wide
           title="編輯課程"
           onClose={() => setCourseDraft(null)}
           onSubmit={async () => {
@@ -621,6 +486,8 @@ export function CoursePage() {
               teacher: courseDraft.teacher.trim(),
               code: courseDraft.code.trim(),
             })
+            // Renumbering is the generator's job, not the dialog's: changing a
+            // slot's weekday does not move the meetings already on the calendar.
             setCourseDraft(null)
           }}
           submitLabel="儲存"

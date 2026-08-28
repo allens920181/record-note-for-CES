@@ -238,6 +238,7 @@ a.list-item:hover { border-color: var(--accent); }
   padding: 1.4rem 1.5rem; width: min(30rem, 100%); box-shadow: 0 24px 60px -20px rgba(0,0,0,.5);
   max-height: 90vh; overflow-y: auto;
 }
+.modal.wide { width: min(46rem, 100%); }
 .modal h2 { margin-bottom: 1rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.2rem; }
 
@@ -594,6 +595,18 @@ a.list-item:hover { border-color: var(--accent); }
 
 /* Work-time slots schedule effort, not a meeting — they produce no file. */
 .slot-row.is-work { opacity: .78; }
+
+/* Inside a dialog the row cannot rely on page width. Fixed columns for the
+   selects, a generous one for each time — a 12-hour <input type=time> needs
+   room for AM/PM, and clipping it turns 19:00 into a convincing 07:00. */
+.slot-row.in-form {
+  display: grid; gap: .5rem; align-items: end;
+  grid-template-columns: 7rem 5.5rem 8rem 8rem minmax(6rem, 1fr) auto;
+}
+@media (max-width: 46rem) {
+  .slot-row.in-form { grid-template-columns: 1fr 1fr; }
+  .slot-row.in-form > :last-child { grid-column: 1 / -1; justify-self: end; }
+}
 .slot-row.is-work select, .slot-row.is-work input { border-style: dashed; }
 
 /* A computed value, not a field — must not read as a disabled input. */

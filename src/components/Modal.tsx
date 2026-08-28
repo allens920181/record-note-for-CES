@@ -10,6 +10,8 @@ interface Props {
   /** Red affirmative button, for deletions and anything else unrecoverable. */
   submitDanger?: boolean
   cancelLabel?: string
+  /** For dialogs holding a table rather than a column of fields. */
+  wide?: boolean
   children: ReactNode
 }
 
@@ -21,6 +23,7 @@ export function Modal({
   submitDisabled,
   submitDanger,
   cancelLabel,
+  wide,
   children,
 }: Props) {
   useEffect(() => {
@@ -33,7 +36,7 @@ export function Modal({
 
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <h2>{title}</h2>
         <form
           onSubmit={(e) => {

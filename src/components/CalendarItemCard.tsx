@@ -160,7 +160,7 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
       {series && (
         <div className="notice" style={{ marginBottom: '.9rem' }}>
           這是<strong>每週</strong>固定的寫作業時段（每週{WEEKDAY_SHORT[weekdayOf(item.date)]}
-          ），不是只有這一天。改時間要改整段，到課程頁的「課程設定」。
+          ），不是只有這一天。改時間要改整段，到課程頁的「作業與閱讀」。
         </div>
       )}
 

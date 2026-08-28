@@ -161,9 +161,16 @@ export async function createCourse(input: {
   code: string
   credits: number
   color: string
+  slots?: ClassSlot[]
 }): Promise<string> {
   const id = newId('course')
-  await db.courses.add({ ...input, id, slots: [], glossary: [], createdAt: Date.now() })
+  await db.courses.add({
+    ...input,
+    id,
+    slots: input.slots ?? [],
+    glossary: [],
+    createdAt: Date.now(),
+  })
   return id
 }
 
@@ -218,7 +225,7 @@ export async function sessionsInTerm(termId: string): Promise<number> {
 
 export async function updateCourse(
   courseId: string,
-  patch: Partial<Pick<Course, 'name' | 'teacher' | 'code' | 'credits' | 'color'>>,
+  patch: Partial<Pick<Course, 'name' | 'teacher' | 'code' | 'credits' | 'color' | 'slots'>>,
 ): Promise<void> {
   await db.courses.update(courseId, patch)
 }
