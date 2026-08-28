@@ -1,55 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import {
-  addWorkBlock,
-  createSessionOn,
-  db,
-  generateSessionsFromTimetable,
-  renumberSessions,
-} from '../db'
-import type { MeetingKind, Recurrence } from '../db'
-import { MEETING_KIND_LABEL } from '../db/schema'
+import { db } from '../db'
 import {
   addDays,
   addMonths,
   formatMonthTitle,
   formatRange,
-  minutesOf,
   startOfWeek,
-  timeOf,
   todayISO,
-  weekdayOf,
 } from '../lib/dates'
 import { expandOccurrences } from '../schedule/occurrences'
-import type { CalendarItem, ItemKind } from '../schedule/occurrences'
+import type { CalendarItem } from '../schedule/occurrences'
 import { Breadcrumbs, TopBar } from '../components/Layout'
-import { Modal } from '../components/Modal'
 import { WeekCalendar } from '../components/WeekCalendar'
 import { MonthCalendar } from '../components/MonthCalendar'
 import { TermPicker, useTermChoice } from '../components/TermPicker'
-import { TimeField } from '../components/TimeField'
 import { CalendarItemCard } from '../components/CalendarItemCard'
+import { TimeBlockDialog, createTimeBlock, makeDraft } from '../components/TimeBlockDialog'
+import type { TimeBlockDraft } from '../components/TimeBlockDialog'
 
 type View = 'week' | 'month'
-
-interface Draft {
-  courseId: string
-  kind: ItemKind
-  repeat: Recurrence
-  date: string
-  start: string
-  end: string
-  /** False while the time is still the app's guess rather than the reader's. */
-  timed: boolean
-}
 
 export function CalendarPage() {
   const navigate = useNavigate()
   const [view, setView] = useState<View>('week')
   const [anchor, setAnchor] = useState(todayISO())
   const [termId, setTermId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<Draft | null>(null)
+  const [draft, setDraft] = useState<TimeBlockDraft | null>(null)
   const [shownKey, setShownKey] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [blocked, setBlocked] = useState(false)
@@ -127,21 +105,6 @@ export function CalendarPage() {
     return () => window.clearTimeout(t)
   }, [message])
 
-  /**
-   * The hour a new item starts on.
-   *
-   * The week grid knows it from where the click landed. The month grid has no
-   * hours to click, and used to hand over a hardcoded 09:00 — a time nothing in
-   * this app ever happens at, so every month-view entry had to be retyped.
-   * Ask the course how it usually meets instead.
-   */
-  function usualStart(courseId: string, kind: ItemKind): number {
-    const course = courses?.find((c) => c.id === courseId)
-    const slot =
-      course?.slots.find((s) => (s.kind ?? 'lecture') === kind) ?? course?.slots[0]
-    return minutesOf(slot?.start) ?? 19 * 60
-  }
-
   function openDraft(date: string, startMin: number | null) {
     const first = courses?.[0]
     if (!first) {
@@ -150,24 +113,7 @@ export function CalendarPage() {
       setBlocked(true)
       return
     }
-    const from = startMin ?? usualStart(first.id, 'lecture')
-    setDraft({
-      courseId: first.id,
-      kind: 'lecture',
-      repeat: 'weekly',
-      date,
-      start: timeOf(from),
-      end: timeOf(Math.min(23 * 60 + 59, from + 120)),
-      // Only a time the reader has not touched may be re-derived under them.
-      timed: startMin !== null,
-    })
-  }
-
-  /** Re-derives the untouched time when the course or the kind changes. */
-  function retime(next: Draft): Draft {
-    if (next.timed) return next
-    const from = usualStart(next.courseId, next.kind)
-    return { ...next, start: timeOf(from), end: timeOf(Math.min(23 * 60 + 59, from + 120)) }
+    setDraft(makeDraft(first, date, startMin))
   }
 
   function goTo(item: CalendarItem) {
@@ -184,41 +130,8 @@ export function CalendarPage() {
 
   async function submitDraft() {
     if (!draft) return
-    const { courseId, kind, repeat, date, start, end } = draft
-
-    if (kind === 'work') {
-      await addWorkBlock({
-        courseId,
-        repeat,
-        ...(repeat === 'weekly' ? { weekday: weekdayOf(date) } : { date }),
-        start,
-        end,
-      })
-      setMessage(repeat === 'weekly' ? '已加入每週固定的作業時間。' : '已加入這一天的作業時間。')
-      setDraft(null)
-      return
-    }
-
-    const meetingKind = kind as MeetingKind
-    if (repeat === 'once') {
-      await createSessionOn(courseId, date, meetingKind, { start, end })
-      await renumberSessions(courseId)
-      setMessage(`已新增 ${date} 的${MEETING_KIND_LABEL[meetingKind]}。`)
-      setDraft(null)
-      return
-    }
-
-    // Weekly meetings become a timetable slot, then expand across the term —
-    // creating one occurrence would silently lose the recurrence.
-    const course = await db.courses.get(courseId)
-    if (!course) return
-    await db.courses.update(courseId, {
-      slots: [...course.slots, { weekday: weekdayOf(date), start, end, kind: meetingKind }],
-    })
     try {
-      const { created } = await generateSessionsFromTimetable(courseId)
-      await renumberSessions(courseId)
-      setMessage(`已加入每週的${MEETING_KIND_LABEL[meetingKind]}，並產生 ${created} 個週次。`)
+      setMessage(await createTimeBlock(draft))
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err))
     }
@@ -346,90 +259,13 @@ export function CalendarPage() {
       )}
 
       {draft && (
-        <Modal
-          title="新增行程"
+        <TimeBlockDialog
+          draft={draft}
+          onChange={setDraft}
+          courses={courses ?? []}
           onClose={() => setDraft(null)}
           onSubmit={submitDraft}
-          submitLabel="建立"
-        >
-          <div className="field">
-            <label htmlFor="d-course">課程</label>
-            <select
-              id="d-course"
-              value={draft.courseId}
-              onChange={(e) => setDraft(retime({ ...draft, courseId: e.target.value }))}
-            >
-              {(courses ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="row">
-            <div className="field">
-              <label htmlFor="d-kind">類型</label>
-              <select
-                id="d-kind"
-                value={draft.kind}
-                onChange={(e) => setDraft(retime({ ...draft, kind: e.target.value as ItemKind }))}
-              >
-                <option value="lecture">正課</option>
-                <option value="discussion">分組討論</option>
-                <option value="work">作業時間</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="d-repeat">重複</label>
-              <select
-                id="d-repeat"
-                value={draft.repeat}
-                onChange={(e) => setDraft({ ...draft, repeat: e.target.value as Recurrence })}
-              >
-                <option value="weekly">每週</option>
-                <option value="once">只有這次</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="row">
-            <div className="field">
-              <label htmlFor="d-date">日期</label>
-              <input
-                id="d-date"
-                type="date"
-                value={draft.date}
-                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-              />
-              <div className="hint">
-                {draft.repeat === 'weekly'
-                  ? `每週的這一天（週${['日', '一', '二', '三', '四', '五', '六'][weekdayOf(draft.date)]}）`
-                  : '只發生在這一天'}
-              </div>
-            </div>
-            <TimeField
-              id="d-start"
-              label="開始"
-              value={draft.start}
-              onChange={(v) => setDraft({ ...draft, start: v, timed: true })}
-            />
-            <TimeField
-              id="d-end"
-              label="結束"
-              value={draft.end}
-              onChange={(v) => setDraft({ ...draft, end: v, timed: true })}
-            />
-          </div>
-
-          {draft.kind === 'work' ? (
-            <div className="notice">作業時間不會產生錄音檔案，只用來算出還剩多少時間可以寫。</div>
-          ) : draft.repeat === 'weekly' ? (
-            <div className="notice">會寫進課表，並依學期週數一次產生整學期的週次。</div>
-          ) : (
-            <div className="notice">只會建立這一天的一個週次，不影響課表。</div>
-          )}
-        </Modal>
+        />
       )}
     </>
   )

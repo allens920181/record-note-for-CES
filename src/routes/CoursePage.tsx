@@ -3,7 +3,6 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   WEEKDAY_LABELS,
-  createSessionOn,
   db,
   deleteSessionCascade,
   sessionsInOrder,
@@ -27,6 +26,8 @@ import { Modal } from '../components/Modal'
 import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
 import { TimeField } from '../components/TimeField'
+import { TimeBlockDialog, createTimeBlock, makeDraft } from '../components/TimeBlockDialog'
+import type { TimeBlockDraft } from '../components/TimeBlockDialog'
 import { useConfirm } from '../components/ConfirmProvider'
 import { AssignmentCard, NewAssignmentDialog } from '../components/AssignmentCard'
 
@@ -53,8 +54,7 @@ export function CoursePage() {
       { replace: true },
     )
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
-  const [adding, setAdding] = useState<MeetingKind | null>(null)
-  const [addDate, setAddDate] = useState(todayISO())
+  const [adding, setAdding] = useState<TimeBlockDraft | null>(null)
   const [courseDraft, setCourseDraft] = useState<CourseDraft | null>(null)
   const [openAssignment, setOpenAssignment] = useState<string | null>(null)
   const [creatingAssignment, setCreatingAssignment] = useState(false)
@@ -148,11 +148,18 @@ export function CoursePage() {
     }
   }
 
-  async function confirmAdd() {
-    if (!adding) return
-    await createSessionOn(courseId, addDate, adding)
-    await renumberSessions(courseId)
-    setAdding(null)
+  function openAdd() {
+    // A course with no weeks yet is being set up, so the term's first day is a
+    // far better guess than today — which is usually before the term starts.
+    setAdding(
+      makeDraft(
+        course ?? undefined,
+        sessions?.length ? todayISO() : (term?.startDate ?? todayISO()),
+        null,
+        'lecture',
+        'once',
+      ),
+    )
   }
 
   return (
@@ -234,19 +241,12 @@ export function CoursePage() {
             <ProgressOverview courseId={courseId} />
 
             <div className="row" style={{ gap: '.6rem', marginBottom: '1rem' }}>
-              {MEETING_KINDS.map((k) => (
-                <button
-                  key={k}
-                  className={`btn${k === 'lecture' ? ' primary' : ''}`}
-                  style={{ flex: '0 0 auto' }}
-                  onClick={() => {
-                    setAddDate(sessions?.length ? todayISO() : (term?.startDate ?? todayISO()))
-                    setAdding(k)
-                  }}
-                >
-                  新增一次{MEETING_KIND_LABEL[k]}
-                </button>
-              ))}
+              {/* One button, not one per kind: the kind is a field in the
+                  dialog, which also lets a weekly meeting be added from here
+                  instead of only from the other tab. */}
+              <button className="btn primary" style={{ flex: '0 0 auto' }} onClick={openAdd}>
+                新增聚會
+              </button>
               {/* Only offered when it can work. The reason it cannot is a line
                   on screen with a link, not a `title` — which touch and keyboard
                   users never see at all. */}
@@ -274,7 +274,7 @@ export function CoursePage() {
               <div className="empty">
                 <p>
                   還沒有任何週次。每週固定的課先設好課表，就能一次產生整學期；
-                  只開一次的聚會用「新增一次…」挑日期。
+                  只開一次的聚會用「新增聚會」挑日期。
                 </p>
                 {/* The button this used to name lives on another tab, which is
                     the one thing an empty state must never do. */}
@@ -292,15 +292,10 @@ export function CoursePage() {
                       依課表產生整學期
                     </button>
                   )}
-                  <button
-                    className="btn"
-                    style={{ flex: '0 0 auto' }}
-                    onClick={() => {
-                      setAddDate(term?.startDate ?? todayISO())
-                      setAdding('lecture')
-                    }}
-                  >
-                    新增一次聚會
+                  {/* The same words as the toolbar's button: one action must
+                      not answer to two names depending on where it is met. */}
+                  <button className="btn" style={{ flex: '0 0 auto' }} onClick={openAdd}>
+                    新增聚會
                   </button>
                 </div>
               </div>
@@ -400,7 +395,7 @@ export function CoursePage() {
                 只放<strong>每週都會發生</strong>的聚會。正課和分組討論各自每週開一個檔案——
                 兩場是分開的錄音，時間軸沒辦法合併，但同一週會共用同一個週次編號。
                 <br />
-                只開一次的分組討論不必寫在這裡，到「週次」用「新增一次分組討論」挑日期就好。
+                只開一次的分組討論不必寫在這裡，到「週次」用「新增聚會」挑日期就好。
               </p>
 
               {slots.length === 0 ? (
@@ -493,21 +488,20 @@ export function CoursePage() {
               )}
 
               <div className="row" style={{ gap: '.6rem' }}>
-                {MEETING_KINDS.map((k) => (
-                  <button
-                    key={k}
-                    className="btn"
-                    style={{ flex: '0 0 auto' }}
-                    onClick={() =>
-                      patchSlots([
-                        ...slots,
-                        { weekday: k === 'discussion' ? 4 : 2, start: '19:00', end: '22:00', kind: k },
-                      ])
-                    }
-                  >
-                    新增每週{MEETING_KIND_LABEL[k]}
-                  </button>
-                ))}
+                {/* The row that appears already carries a 類型 select, so a
+                    button per kind was two ways to reach the same row. */}
+                <button
+                  className="btn"
+                  style={{ flex: '0 0 auto' }}
+                  onClick={() =>
+                    patchSlots([
+                      ...slots,
+                      { weekday: 2, start: '19:00', end: '22:00', kind: 'lecture' },
+                    ])
+                  }
+                >
+                  新增時段
+                </button>
                 <button
                   className="btn primary"
                   style={{ flex: '0 0 auto' }}
@@ -661,26 +655,21 @@ export function CoursePage() {
       )}
 
       {adding && (
-        <Modal
-          title={`新增一次${MEETING_KIND_LABEL[adding]}`}
+        <TimeBlockDialog
+          draft={adding}
+          onChange={setAdding}
+          courses={[course]}
           onClose={() => setAdding(null)}
-          onSubmit={confirmAdd}
-          submitLabel="建立"
-        >
-          <div className="field">
-            <label htmlFor="add-date">日期</label>
-            <input
-              id="add-date"
-              type="date"
-              value={addDate}
-              autoFocus
-              onChange={(e) => setAddDate(e.target.value)}
-            />
-            <div className="hint">
-              週次編號會依這個日期自動算出來，和同一週的其他聚會共用。
-            </div>
-          </div>
-        </Modal>
+          onSubmit={async () => {
+            try {
+              setMessage({ kind: 'ok', text: await createTimeBlock(adding) })
+            } catch (err) {
+              setMessage({ kind: 'err', text: err instanceof Error ? err.message : String(err) })
+            }
+            setAdding(null)
+          }}
+          title="新增聚會"
+        />
       )}
     </>
   )

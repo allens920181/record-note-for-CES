@@ -152,11 +152,10 @@ export function WorkBlockEditor({ courseId, termWeeks, defaultDate }: Props) {
       )}
 
       <div className="row" style={{ gap: '.6rem' }}>
+        {/* The row that appears already carries a 重複 select, so a button per
+            shape was two ways to reach the same row. */}
         <button className="btn" style={{ flex: '0 0 auto' }} onClick={() => add('weekly')}>
-          新增每週固定時段
-        </button>
-        <button className="btn" style={{ flex: '0 0 auto' }} onClick={() => add('once')}>
-          新增單次時段
+          新增作業時間
         </button>
       </div>
 
