@@ -17,6 +17,7 @@ import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { TermPicker, useTermChoice } from '../components/TermPicker'
 import { TimeField } from '../components/TimeField'
+import { useConfirm } from '../components/ConfirmProvider'
 
 const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
   done: { cls: 'ok', label: '已完成' },
@@ -27,6 +28,7 @@ const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
 }
 
 export function AssignmentsPage() {
+  const ask = useConfirm()
   const { hash } = useLocation()
   const [urlParams] = useSearchParams()
   const [showDone, setShowDone] = useState(false)
@@ -209,7 +211,13 @@ export function AssignmentsPage() {
                       assignment={a}
                       hoursAvailable={load.hoursAvailable}
                       onDelete={async () => {
-                        if (confirm(`刪除「${a.title}」？`)) await deleteAssignment(a.id)
+                        const go = await ask({
+                          title: `刪除作業「${a.title}」？`,
+                          danger: true,
+                          confirmLabel: '刪除這份作業',
+                          body: `拆解出來的 ${a.subtasks.length} 個步驟也會一起消失。`,
+                        })
+                        if (go) await deleteAssignment(a.id)
                       }}
                     />
                   )}

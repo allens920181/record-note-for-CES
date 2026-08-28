@@ -8,8 +8,10 @@ import { Modal } from '../components/Modal'
 import { SetupBanner } from '../components/SetupBanner'
 import { CourseForm, EMPTY_COURSE } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
+import { useConfirm } from '../components/ConfirmProvider'
 
 export function TermPage() {
+  const ask = useConfirm()
   const { termId = '' } = useParams()
   const term = useLiveQuery(() => db.terms.get(termId), [termId])
   const courses = useLiveQuery(
@@ -142,9 +144,23 @@ export function TermPage() {
                 <button
                   className="btn danger sm"
                   onClick={async () => {
-                    if (confirm(`刪除「${c.name}」？底下所有週次、逐字稿與筆記都會一併刪除，無法復原。`)) {
-                      await deleteCourseCascade(c.id)
-                    }
+                    const go = await ask({
+                      title: `刪除課程「${c.name}」？`,
+                      danger: true,
+                      confirmLabel: '刪除這門課',
+                      body: (
+                        <>
+                          會一起消失的：
+                          <ul>
+                            <li>這門課的 {sessionCounts?.[c.id] ?? 0} 個週次，以及它們的逐字稿與筆記</li>
+                            <li>課表、作業時間、作業、閱讀材料、專有名詞表</li>
+                            <li>上傳到這門課的所有檔案</li>
+                          </ul>
+                          要改課名或老師的話，用旁邊的「編輯」就好。
+                        </>
+                      ),
+                    })
+                    if (go) await deleteCourseCascade(c.id)
                   }}
                 >
                   刪除

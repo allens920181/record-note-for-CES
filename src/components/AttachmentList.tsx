@@ -6,6 +6,7 @@ import { ATTACHMENT_KIND_LABEL } from '../db/schema'
 import { addAttachment, readAttachment, removeAttachment } from '../files/attachments'
 import { formatBytes } from '../lib/time'
 import { PdfViewer } from './PdfViewer'
+import { useConfirm } from './ConfirmProvider'
 
 interface Props {
   scope: AttachmentScope
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function AttachmentList({ scope, ownerId, courseId, kinds, title, hint }: Props) {
+  const ask = useConfirm()
   const rows = useLiveQuery(
     () => db.attachments.where({ scope, ownerId }).sortBy('createdAt'),
     [scope, ownerId],
@@ -90,7 +92,13 @@ export function AttachmentList({ scope, ownerId, courseId, kinds, title, hint }:
               <button
                 className="btn danger sm"
                 onClick={async () => {
-                  if (confirm(`刪除「${row.fileName}」？`)) await removeAttachment(row.id)
+                  const go = await ask({
+                    title: `刪除「${row.fileName}」？`,
+                    danger: true,
+                    confirmLabel: '刪除這個檔案',
+                    body: '檔案會從你選的資料夾裡移除。如果閱讀清單有書指著它，那個連結會失效。',
+                  })
+                  if (go) await removeAttachment(row.id)
                 }}
               >
                 刪除

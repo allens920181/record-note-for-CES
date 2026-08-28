@@ -4,6 +4,7 @@ import { db } from '../db'
 import type { RecordingDraft } from '../db/schema'
 import { SessionRecorder, assembleDraft, discardDraft, recorderSupported } from '../audio/recorder'
 import { formatTime } from '../lib/time'
+import { useConfirm } from './ConfirmProvider'
 
 interface Props {
   sessionId: string
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function RecorderPanel({ sessionId, disabled, onFinished }: Props) {
+  const ask = useConfirm()
   const recorder = useRef<SessionRecorder | null>(null)
   if (!recorder.current) recorder.current = new SessionRecorder()
 
@@ -171,7 +173,13 @@ export function RecorderPanel({ sessionId, disabled, onFinished }: Props) {
                   className="btn danger sm"
                   style={{ flex: '0 0 auto' }}
                   onClick={async () => {
-                    if (confirm('丟棄這份未完成的錄音？無法復原。')) await discardDraft(d)
+                    const go = await ask({
+                      title: '丟棄這份未完成的錄音？',
+                      danger: true,
+                      confirmLabel: '丟棄',
+                      body: '這是上次分頁關掉時留在磁碟上的片段。丟掉之後就沒辦法再復原成音檔了。',
+                    })
+                    if (go) await discardDraft(d)
                   }}
                 >
                   丟棄

@@ -3,10 +3,12 @@ import { pickExportFolder } from '../storage/fsRoot'
 import { exportTermMarkdown } from '../export/markdown'
 import { backupBlob, backupFileName, buildBackup, downloadBlob, restoreBackup } from '../export/backup'
 import { TermPicker, useTermChoice } from './TermPicker'
+import { useConfirm } from './ConfirmProvider'
 
 type Msg = { kind: 'ok' | 'err'; text: string } | null
 
 export function ExportPanel() {
+  const ask = useConfirm()
   const { termId, setTermId, terms } = useTermChoice()
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<Msg>(null)
@@ -90,19 +92,30 @@ export function ExportPanel() {
               const file = e.target.files?.[0]
               e.target.value = ''
               if (!file) return
-              if (
-                !confirm(
-                  '從備份還原會清空目前的學期、課程、逐字稿與筆記，改成備份裡的內容。\n' +
-                    '這個動作無法復原。要繼續嗎？',
-                )
-              ) {
-                return
-              }
-              void guard('restore', async () => {
-                const { restored } = await restoreBackup(file)
-                const rows = Object.values(restored).reduce((s, n) => s + n, 0)
-                return `已還原 ${rows} 筆資料。`
-              })
+              void (async () => {
+                const go = await ask({
+                  title: '從備份還原？',
+                  danger: true,
+                  confirmLabel: '清空並還原',
+                  body: (
+                    <>
+                      目前這台電腦上的所有內容會被<strong>清空</strong>，換成備份檔裡的：
+                      <ul>
+                        <li>學期、課程、週次、課表與作業時間</li>
+                        <li>逐字稿、筆記、本週進度</li>
+                        <li>作業、閱讀材料、專有名詞表</li>
+                      </ul>
+                      音檔與 PDF 不在備份裡，會留在你選的資料夾。
+                    </>
+                  ),
+                })
+                if (!go) return
+                await guard('restore', async () => {
+                  const { restored } = await restoreBackup(file)
+                  const rows = Object.values(restored).reduce((s, n) => s + n, 0)
+                  return `已還原 ${rows} 筆資料。`
+                })
+              })()
             }}
           />
         </label>

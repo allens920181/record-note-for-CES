@@ -5,8 +5,10 @@ import { createTerm, db, deleteTermCascade, todayISO } from '../db'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { SetupBanner } from '../components/SetupBanner'
+import { useConfirm } from '../components/ConfirmProvider'
 
 export function Dashboard() {
+  const ask = useConfirm()
   const terms = useLiveQuery(() => db.terms.orderBy('createdAt').reverse().toArray(), [])
   const counts = useLiveQuery(async () => {
     const all = await db.courses.toArray()
@@ -76,9 +78,22 @@ export function Dashboard() {
                 <button
                   className="btn danger sm"
                   onClick={async () => {
-                    if (confirm(`刪除「${t.name}」？底下所有課程、週次、逐字稿與筆記都會一併刪除，無法復原。`)) {
-                      await deleteTermCascade(t.id)
-                    }
+                    const go = await ask({
+                      title: `刪除學期「${t.name}」？`,
+                      danger: true,
+                      confirmLabel: '刪除這個學期',
+                      body: (
+                        <>
+                          會一起消失的：
+                          <ul>
+                            <li>這個學期底下的 {counts?.[t.id] ?? 0} 門課程</li>
+                            <li>那些課的所有週次、逐字稿與筆記</li>
+                            <li>作業、閱讀材料、上傳的檔案</li>
+                          </ul>
+                        </>
+                      ),
+                    })
+                    if (go) await deleteTermCascade(t.id)
                   }}
                 >
                   刪除

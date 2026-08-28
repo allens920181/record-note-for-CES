@@ -584,3 +584,11 @@ input[type='time']:focus { outline: 2px solid var(--accent); outline-offset: -1p
 /* A link with nowhere to go: dimmed and inert, but still occupying its place so
    the toolbar does not shift as you move through a course. */
 .btn.is-off { opacity: .45; pointer-events: none; }
+
+/* ── confirmation ────────────────────────────────────────────────── */
+.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger-solid:hover:not(:disabled) { filter: brightness(1.08); background: var(--danger); }
+.confirm-body { font-size: .9rem; color: var(--ink-soft); line-height: 1.7; }
+.confirm-body ul { margin: .5rem 0 0; padding-left: 1.15rem; }
+.confirm-body li { margin-bottom: .2rem; }
+.confirm-final { margin: .8rem 0 0; font-size: .85rem; font-weight: 500; color: var(--danger); }

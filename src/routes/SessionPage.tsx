@@ -15,6 +15,7 @@ import type { NoteEditorHandle } from '../components/NoteEditor'
 import { RecorderPanel } from '../components/RecorderPanel'
 import { AttachmentList } from '../components/AttachmentList'
 import { Modal } from '../components/Modal'
+import { useConfirm } from '../components/ConfirmProvider'
 
 /** Index of the last segment that has started by time `t`. */
 function findActive(segments: TranscriptSegment[], t: number): number {
@@ -34,6 +35,7 @@ function findActive(segments: TranscriptSegment[], t: number): number {
 }
 
 export function SessionPage() {
+  const ask = useConfirm()
   const { sessionId = '' } = useParams()
   const [searchParams] = useSearchParams()
 
@@ -206,12 +208,19 @@ export function SessionPage() {
             // Seconds, not rounded minutes: this dialog only ever appears when
             // the headroom is nearly gone, and "約 0 分鐘 / 只剩約 0 分鐘" says
             // nothing.
-            return confirm(
-              `這份錄音 ${formatQuota(w.needSeconds)}，但今天的免費額度只剩 ` +
-                `${formatQuota(w.remainingTodaySeconds)}。\n\n` +
-                `超過的部分會被服務端擋下並自動重試，可能要等到額度回補。\n` +
-                `要繼續嗎？`,
-            )
+            return ask({
+              title: '這份錄音會超過今天的免費額度',
+              confirmLabel: '仍然轉錄',
+              cancelLabel: '先不要',
+              body: (
+                <>
+                  這份錄音 {formatQuota(w.needSeconds)}，但今天的免費額度只剩{' '}
+                  {formatQuota(w.remainingTodaySeconds)}。
+                  <br />
+                  超過的部分會被服務端擋下並自動重試，可能要等到額度回補才會跑完。
+                </>
+              ),
+            })
           },
           replaces,
         )

@@ -8,12 +8,14 @@ import type { ReadingStatus } from '../db/schema'
 import { addAttachment, readAttachment, removeAttachment } from '../files/attachments'
 import { formatBytes } from '../lib/time'
 import { PdfViewer } from './PdfViewer'
+import { useConfirm } from './ConfirmProvider'
 
 interface Props {
   courseId: string
 }
 
 export function ReadingList({ courseId }: Props) {
+  const ask = useConfirm()
   const readings = useLiveQuery(
     () => db.readings.where('courseId').equals(courseId).sortBy('createdAt'),
     [courseId],
@@ -267,7 +269,13 @@ export function ReadingList({ courseId }: Props) {
                         onOpen={() => r.attachmentId && void openFile(r.attachmentId)}
                         onRemove={async () => {
                           if (!r.attachmentId) return
-                          if (!confirm('刪除這本書的電子檔？檔案會從資料夾移除，無法復原。')) return
+                          const go = await ask({
+                            title: `刪除《${r.title}》的電子檔？`,
+                            danger: true,
+                            confirmLabel: '刪除這個檔案',
+                            body: '檔案會從你選的資料夾裡移除。書目本身、章節與讀書筆記都會留著。',
+                          })
+                          if (!go) return
                           const id = r.attachmentId
                           await updateReading(r.id, { attachmentId: undefined })
                           await removeAttachment(id)
@@ -294,7 +302,15 @@ export function ReadingList({ courseId }: Props) {
                         className="btn danger sm"
                         style={{ flex: '0 0 auto' }}
                         onClick={async () => {
-                          if (confirm(`刪除「${r.title}」？`)) await deleteReading(r.id)
+                          const go = await ask({
+                            title: `從閱讀清單刪除《${r.title}》？`,
+                            danger: true,
+                            confirmLabel: '刪除這本書',
+                            body: r.attachmentId
+                              ? '書目、章節、進度與讀書筆記都會消失。上傳的電子檔會留在資料夾裡，可以到「書目與課程檔案」再處理。'
+                              : '書目、章節、進度與讀書筆記都會消失。',
+                          })
+                          if (go) await deleteReading(r.id)
                         }}
                       >
                         刪除

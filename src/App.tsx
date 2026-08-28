@@ -12,6 +12,7 @@ import { SessionPage } from './routes/SessionPage'
 import { SettingsPage } from './routes/SettingsPage'
 import { migrateLegacyWorkSlots } from './db'
 import { failInterruptedJobs } from './stt/transcribe'
+import { ConfirmProvider } from './components/ConfirmProvider'
 
 export function App() {
   useEffect(() => {
@@ -23,7 +24,8 @@ export function App() {
 
   return (
     // HashRouter keeps deep links working on a static host with no rewrites.
-    <HashRouter>
+    <ConfirmProvider>
+      <HashRouter>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
@@ -38,6 +40,7 @@ export function App() {
           <Route path="*" element={<Dashboard />} />
         </Route>
       </Routes>
-    </HashRouter>
+      </HashRouter>
+    </ConfirmProvider>
   )
 }

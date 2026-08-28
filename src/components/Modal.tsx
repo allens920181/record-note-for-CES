@@ -7,10 +7,22 @@ interface Props {
   onSubmit?: () => void
   submitLabel?: string
   submitDisabled?: boolean
+  /** Red affirmative button, for deletions and anything else unrecoverable. */
+  submitDanger?: boolean
+  cancelLabel?: string
   children: ReactNode
 }
 
-export function Modal({ title, onClose, onSubmit, submitLabel, submitDisabled, children }: Props) {
+export function Modal({
+  title,
+  onClose,
+  onSubmit,
+  submitLabel,
+  submitDisabled,
+  submitDanger,
+  cancelLabel,
+  children,
+}: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -32,10 +44,15 @@ export function Modal({ title, onClose, onSubmit, submitLabel, submitDisabled, c
           {children}
           <div className="modal-actions">
             <button type="button" className="btn ghost" onClick={onClose}>
-              取消
+              {cancelLabel ?? '取消'}
             </button>
             {onSubmit && (
-              <button type="submit" className="btn primary" disabled={submitDisabled}>
+              <button
+                type="submit"
+                className={`btn ${submitDanger ? 'danger-solid' : 'primary'}`}
+                disabled={submitDisabled}
+                autoFocus={!submitDanger}
+              >
                 {submitLabel ?? '確定'}
               </button>
             )}

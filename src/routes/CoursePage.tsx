@@ -27,11 +27,13 @@ import { Modal } from '../components/Modal'
 import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
 import { TimeField } from '../components/TimeField'
+import { useConfirm } from '../components/ConfirmProvider'
 
 type Tab = 'sessions' | 'setup' | 'work' | 'require'
 
 
 export function CoursePage() {
+  const ask = useConfirm()
   const { courseId = '' } = useParams()
   const [tab, setTab] = useState<Tab>('sessions')
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
@@ -280,11 +282,19 @@ export function CoursePage() {
                     <button
                       className="btn danger sm"
                       onClick={async () => {
-                        if (
-                          confirm(
-                            `刪除 ${s.date} 的${SESSION_KIND_LABEL[s.kind ?? 'lecture']}？逐字稿與筆記會一併刪除，無法復原。`,
-                          )
-                        ) {
+                        const go = await ask({
+                          title: `刪除 ${s.date} 的${SESSION_KIND_LABEL[s.kind ?? 'lecture']}？`,
+                          danger: true,
+                          confirmLabel: '刪除這個週次',
+                          body: (
+                            <>
+                              會一起消失的：這一週的逐字稿、筆記、本週進度與講義。
+                              <br />
+                              只是想重新轉錄的話，到那一週的工作區用逐字稿旁的「⋯」，筆記會留著。
+                            </>
+                          ),
+                        })
+                        if (go) {
                           await deleteSessionCascade(s.id)
                           await renumberSessions(courseId)
                         }
