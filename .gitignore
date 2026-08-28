@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+# ffmpeg core is copied from node_modules by scripts/vendor-ffmpeg.mjs
+public/ffmpeg/
+*.tsbuildinfo

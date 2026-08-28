@@ -1,0 +1,896 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap');
+
+:root {
+  --ground: #f2f4f3;
+  --surface: #ffffff;
+  --surface-2: #eaeeec;
+  --ink: #16211f;
+  --ink-soft: #43524e;
+  --muted: #6b7a76;
+  --line: #d9e0dd;
+  --line-strong: #bfcac6;
+  --accent: #1f6f5c;
+  --accent-ink: #14513f;
+  --accent-wash: #deebe6;
+  --danger: #9b2c2c;
+  --danger-wash: #fbe9e9;
+  --warn: #8a5d0f;
+  --warn-wash: #f3e7ce;
+  --shadow: 0 1px 2px rgba(22, 33, 31, 0.05), 0 8px 24px -16px rgba(22, 33, 31, 0.28);
+
+  --display: 'Noto Serif TC', 'Songti TC', Georgia, serif;
+  --body: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ground: #0d1413;
+    --surface: #141d1b;
+    --surface-2: #1a2523;
+    --ink: #e5ece9;
+    --ink-soft: #c0ccc8;
+    --muted: #8b9c97;
+    --line: #253330;
+    --line-strong: #354844;
+    --accent: #58bb9e;
+    --accent-ink: #8fd7c1;
+    --accent-wash: #16332b;
+    --danger: #e88c8c;
+    --danger-wash: #3a1d1d;
+    --warn: #dda84a;
+    --warn-wash: #35290f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -16px rgba(0, 0, 0, 0.8);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { font-family: var(--display); line-height: 1.4; margin: 0; text-wrap: balance; }
+h1 { font-size: 1.6rem; font-weight: 700; }
+h2 { font-size: 1.2rem; font-weight: 700; }
+h3 { font-size: 1rem; font-weight: 600; }
+a { color: var(--accent-ink); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* ── shell ───────────────────────────────────────────────────────── */
+/* Sidebar beside a column that holds the top bar and the page. The workspace
+   still measures itself against the top bar's height, which has not moved. */
+.app { display: flex; flex-direction: row; min-height: 100%; }
+.app-main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+
+.sidebar {
+  flex: 0 0 15rem; width: 15rem; display: none; flex-direction: column;
+  background: var(--surface); border-right: 1px solid var(--line);
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  z-index: 25;
+}
+.sidebar.is-open { display: flex; }
+.side-top { padding: .85rem 1rem .6rem; }
+.side-nav { display: flex; flex-direction: column; padding: 0 .5rem .5rem; }
+.side-link, .side-week, .side-course-name {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .35rem .55rem; border-radius: 6px;
+  font-size: .86rem; color: var(--ink-soft); text-decoration: none;
+}
+.side-link:hover, .side-week:hover, .side-course-name:hover {
+  background: var(--surface-2); color: var(--ink);
+}
+.side-link.is-here, .side-week.is-here { background: var(--accent-wash); color: var(--accent-ink); font-weight: 500; }
+.side-sep { height: 1px; background: var(--line); margin: .3rem .75rem .6rem; }
+.side-term { padding: 0 .75rem .5rem; }
+.side-term .field { flex: 1 1 auto !important; }
+.side-tree { padding: 0 .5rem 2rem; }
+.side-empty { font-size: .8rem; color: var(--muted); padding: .35rem .55rem; margin: 0; line-height: 1.7; }
+.side-indent { padding-left: 1.7rem; }
+.side-course { margin-bottom: .1rem; }
+.side-row { display: flex; align-items: center; }
+.side-row.is-here .side-course-name { color: var(--ink); font-weight: 600; }
+.side-twist {
+  flex: 0 0 1.15rem; width: 1.15rem; height: 1.6rem; padding: 0;
+  font: inherit; font-size: .7rem; line-height: 1; color: var(--muted);
+  background: none; border: none; cursor: pointer; border-radius: 4px;
+}
+.side-twist:hover { background: var(--surface-2); color: var(--ink); }
+.side-course-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-dot { width: .5rem; height: .5rem; border-radius: 50%; flex: none; }
+.side-week { padding-left: 1.7rem; font-size: .82rem; }
+.side-week.is-off { text-decoration: line-through; color: var(--muted); }
+.side-week-kind { font-size: .72rem; color: var(--muted); }
+.side-week.is-here .side-week-kind { color: inherit; }
+
+.side-toggle {
+  flex: 0 0 auto; font: inherit; font-size: 1rem; line-height: 1;
+  padding: .35rem .5rem; border-radius: 6px; cursor: pointer;
+  background: none; border: 1px solid transparent; color: var(--ink-soft);
+}
+.side-toggle:hover { background: var(--surface-2); border-color: var(--line); color: var(--ink); }
+
+.side-scrim { display: none; }
+/* Narrow: the sidebar floats over the page instead of taking a column from
+   it — at this width there is no column to spare. */
+@media (max-width: 59.99rem) {
+  .sidebar { position: fixed; top: 0; left: 0; bottom: 0; height: auto; box-shadow: var(--shadow); }
+  .side-scrim.is-open {
+    display: block; position: fixed; inset: 0; z-index: 24;
+    background: rgba(0, 0, 0, .35);
+  }
+}
+
+.topbar {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: .7rem 1.25rem; background: var(--surface);
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20;
+}
+.topnav { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap; }
+.brand {
+  font-family: var(--display); font-weight: 700; font-size: 1rem;
+  color: var(--ink); text-decoration: none; white-space: nowrap;
+}
+.crumbs { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: var(--muted); min-width: 0; }
+.crumbs a { color: var(--muted); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumbs a:hover { color: var(--ink); }
+.crumbs .sep { opacity: .5; }
+.crumbs .here { color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spacer { flex: 1; }
+
+.page { padding: 1.75rem 1.25rem 4rem; max-width: 62rem; margin: 0 auto; width: 100%; }
+.page-head { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.page-head p { margin: .35rem 0 0; color: var(--muted); font-size: .88rem; max-width: 42rem; }
+
+/* ── controls ────────────────────────────────────────────────────── */
+.btn {
+  font-family: var(--body); font-size: .86rem; font-weight: 500;
+  padding: .45rem .85rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+  display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--muted); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.btn.danger { color: var(--danger); border-color: transparent; background: transparent; }
+.btn.danger:hover:not(:disabled) { background: var(--danger-wash); }
+.btn.sm { font-size: .78rem; padding: .28rem .6rem; }
+
+input[type='text'], input[type='date'], input[type='number'], input[type='password'], select, textarea {
+  font-family: var(--body); font-size: .88rem; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 6px; padding: .45rem .6rem; width: 100%;
+}
+textarea { resize: vertical; line-height: 1.6; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+label { display: block; font-size: .8rem; font-weight: 500; color: var(--ink-soft); margin-bottom: .3rem; }
+.field { margin-bottom: 1rem; }
+.field .hint { font-size: .78rem; color: var(--muted); margin-top: .3rem; line-height: 1.55; }
+.row { display: flex; gap: .75rem; flex-wrap: wrap; }
+.row > * { flex: 1 1 10rem; min-width: 0; }
+
+/* ── cards & lists ───────────────────────────────────────────────── */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 1.1rem 1.25rem; box-shadow: var(--shadow);
+}
+.stack { display: flex; flex-direction: column; gap: .7rem; }
+.list-item {
+  display: flex; align-items: center; gap: .9rem;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .85rem 1.1rem; box-shadow: var(--shadow);
+  text-decoration: none; color: inherit; transition: border-color .12s, transform .12s;
+}
+a.list-item:hover { border-color: var(--accent); }
+/* Block, not inline: in the file list these sit inside a <button>, where two
+   inline spans run the name and its size together into one word. */
+.list-item .title { display: block; font-weight: 500; color: var(--ink); }
+.list-item .sub { display: block; font-size: .8rem; color: var(--muted); }
+.swatch { width: .55rem; align-self: stretch; border-radius: 3px; flex: none; min-height: 2.2rem; }
+.grow { flex: 1; min-width: 0; }
+
+.empty {
+  border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  padding: 2.25rem 1.5rem; text-align: center; color: var(--muted); font-size: .88rem;
+}
+.empty p { margin: 0 0 .9rem; }
+
+.tag {
+  font-family: var(--mono); font-size: .7rem; letter-spacing: .05em;
+  padding: .12rem .45rem; border-radius: 4px;
+  background: var(--surface-2); color: var(--muted); border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.tag.ok { background: var(--accent-wash); color: var(--accent-ink); border-color: var(--accent); }
+.tag.warn { background: var(--warn-wash); color: var(--warn); border-color: var(--warn); }
+.tag.err { background: var(--danger-wash); color: var(--danger); border-color: var(--danger); }
+
+.notice {
+  border-radius: var(--radius); padding: .8rem 1rem; font-size: .85rem;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-soft);
+  line-height: 1.6;
+}
+.notice.warn { background: var(--warn-wash); border-color: var(--warn); color: var(--ink); }
+.notice.err { background: var(--danger-wash); border-color: var(--danger); color: var(--ink); }
+.notice.ok { background: var(--accent-wash); border-color: var(--accent); color: var(--ink); }
+.notice pre { white-space: pre-wrap; font-family: var(--mono); font-size: .75rem; margin: .5rem 0 0; }
+
+/* ── modal ───────────────────────────────────────────────────────── */
+.backdrop {
+  position: fixed; inset: 0; background: rgba(10, 18, 16, .5);
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem; z-index: 50;
+}
+.modal {
+  background: var(--surface); border-radius: 10px; border: 1px solid var(--line);
+  padding: 1.4rem 1.5rem; width: min(30rem, 100%); box-shadow: 0 24px 60px -20px rgba(0,0,0,.5);
+  max-height: 90vh; overflow-y: auto;
+}
+.modal h2 { margin-bottom: 1rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.2rem; }
+
+/* ── workspace: the two panes ────────────────────────────────────── */
+.workspace { display: flex; flex-direction: column; height: calc(100vh - 3.2rem); }
+.ws-head {
+  display: flex; align-items: center; gap: .8rem; flex-wrap: wrap;
+  padding: .7rem 1.25rem; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.ws-title { font-family: var(--display); font-weight: 600; font-size: .98rem; }
+.ws-sub { font-size: .78rem; color: var(--muted); }
+
+.panes { flex: 1; display: grid; grid-template-columns: 1fr; min-height: 0; }
+/* Below the split point only one pane fits. Stacking them halves an already
+   fixed height (the workspace is calc(100vh - 3.2rem)), leaving two windows too
+   short to read or write in — so show one at a time and let the tabs choose. */
+.pane-tabs { display: flex; border-bottom: 1px solid var(--line); background: var(--surface); }
+.ptab {
+  flex: 1 1 0; font: inherit; font-size: .82rem; cursor: pointer;
+  padding: .5rem .6rem; border: 0; border-bottom: 2px solid transparent;
+  background: none; color: var(--muted);
+}
+.ptab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+@media (min-width: 60rem) {
+  .panes { grid-template-columns: 1fr 1fr; }
+  .pane-tabs { display: none; }
+}
+@media (max-width: 59.99rem) {
+  .panes[data-show='note'] > .pane:first-child { display: none; }
+  .panes[data-show='left'] > .pane:last-child { display: none; }
+}
+.btn.ghost.active { background: var(--accent-wash); color: var(--accent-ink); }
+.dropzone.is-disabled { opacity: .55; cursor: not-allowed; border-style: solid; }
+.pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--line); }
+.pane:last-child { border-right: 0; }
+.pane-head {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .5rem .9rem; border-bottom: 1px solid var(--line);
+  background: var(--surface-2); font-size: .78rem; color: var(--muted);
+  font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase;
+}
+.pane-body { flex: 1; overflow-y: auto; min-height: 0; }
+
+/* transcript */
+.tx-list { padding: .6rem 0 4rem; }
+.tx-seg {
+  display: grid; grid-template-columns: 4.6rem minmax(0, 1fr); gap: .7rem;
+  padding: .3rem .9rem; cursor: pointer; border-left: 2px solid transparent;
+}
+.tx-seg:hover { background: var(--surface-2); }
+.tx-seg.active { background: var(--accent-wash); border-left-color: var(--accent); }
+.tx-time {
+  font-family: var(--mono); font-size: .74rem; color: var(--muted);
+  padding-top: .18rem; font-variant-numeric: tabular-nums; user-select: none;
+}
+.tx-seg.active .tx-time { color: var(--accent-ink); }
+.tx-text { font-size: .9rem; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+.tx-edit { font-size: .9rem; line-height: 1.75; }
+
+/* audio player */
+.player {
+  display: flex; align-items: center; gap: .7rem; flex-wrap: wrap;
+  padding: .55rem .9rem; border-top: 1px solid var(--line); background: var(--surface);
+}
+.player audio { flex: 1 1 16rem; min-width: 0; height: 2.1rem; }
+.player .clock { font-family: var(--mono); font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* note editor */
+.cm-editor { height: 100%; font-size: .92rem; }
+.cm-editor .cm-scroller { font-family: var(--body); line-height: 1.8; padding: .6rem .3rem; }
+.cm-editor .cm-content { padding-bottom: 6rem; }
+.cm-editor.cm-focused { outline: none; }
+.cm-ts {
+  font-family: var(--mono); font-size: .82em; cursor: pointer;
+  background: var(--accent-wash); color: var(--accent-ink);
+  padding: .05em .3em; border-radius: 3px; border: 1px solid var(--accent);
+}
+.cm-ts:hover { filter: brightness(.95); }
+/* ── the note editor draws markdown as itself ───────────────────── */
+/* Syntax markers on the line the cursor is on: present, but out of the way. */
+.cm-md-mark { color: var(--muted); opacity: .55; }
+
+/* defaultHighlightStyle underlines markdown headings; that reads as a link
+   rather than a heading, and the size already carries the hierarchy. */
+.cm-md-h, .cm-md-h span { text-decoration: none; }
+.cm-md-h { font-family: var(--display); font-weight: 700; color: var(--ink); line-height: 1.45; }
+.cm-md-h1 { font-size: 1.5rem; margin-top: .6rem; }
+.cm-md-h2 { font-size: 1.25rem; margin-top: .5rem; }
+.cm-md-h3 { font-size: 1.08rem; }
+.cm-md-h4, .cm-md-h5, .cm-md-h6 { font-size: 1rem; color: var(--ink-soft); }
+
+.cm-md-strong { font-weight: 700; color: var(--ink); }
+.cm-md-em { font-style: italic; }
+.cm-md-strike { text-decoration: line-through; color: var(--muted); }
+.cm-md-code {
+  font-family: var(--mono); font-size: .86em;
+  background: var(--surface-2); border-radius: 3px; padding: .05em .25em;
+}
+.cm-md-bullet { color: var(--accent); font-weight: 700; padding-right: .15em; }
+
+.cm-callout-label {
+  font-family: var(--mono); font-size: .72em; letter-spacing: .04em;
+  padding: .05em .4em; border-radius: 3px; margin-right: .35em;
+  vertical-align: .06em; color: #fff;
+}
+.cm-callout-label-重點 { background: var(--accent); }
+.cm-callout-label-疑問 { background: var(--warn); }
+.cm-callout-label-考點 { background: var(--danger); }
+.cm-md-rule { border-bottom: 1px solid var(--line-strong); opacity: .7; }
+
+/* Task boxes are always drawn, cursor or not: a checkbox is not syntax you
+   need to read, it is a control you need to click. */
+.cm-task {
+  display: inline-block; width: 1em; height: 1em; line-height: 1;
+  text-align: center; font-size: .9em; vertical-align: -.12em;
+  border: 1.5px solid var(--line-strong); border-radius: 3px;
+  color: transparent; cursor: pointer; user-select: none;
+}
+.cm-task:hover { border-color: var(--accent); }
+.cm-task.is-done { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* 標記 callouts: 重點 / 疑問 / 考點 */
+.cm-callout {
+  border-left: 3px solid var(--line-strong);
+  padding-left: .6rem; background: var(--surface-2);
+}
+.cm-callout.is-open { font-weight: 500; }
+.cm-callout-重點 { border-left-color: var(--accent); background: var(--accent-wash); }
+.cm-callout-疑問 { border-left-color: var(--warn); background: var(--warn-wash); }
+.cm-callout-考點 { border-left-color: var(--danger); background: var(--danger-wash); }
+/* ── floating format bar, slash menu, outline ────────────────────── */
+.note-wrap { position: relative; height: 100%; }
+.note-host { height: 100%; }
+
+/* Sits above the selection and follows it. Absolute inside the pane so it
+   scrolls away with the text rather than hovering over unrelated lines. */
+.note-bar {
+  position: absolute; z-index: 40; transform: translateY(-100%);
+  display: flex; align-items: center; gap: .15rem; padding: .2rem;
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.note-bar-btn {
+  font: inherit; font-size: .74rem; line-height: 1; white-space: nowrap;
+  padding: .3rem .45rem; border: none; border-radius: 4px;
+  background: none; color: var(--ink-soft); cursor: pointer;
+}
+.note-bar-btn:hover { background: var(--surface-2); color: var(--ink); }
+.note-bar-btn.is-重點:hover { background: var(--accent-wash); color: var(--accent-ink); }
+.note-bar-btn.is-疑問:hover { background: var(--warn-wash); color: var(--warn); }
+.note-bar-btn.is-考點:hover { background: var(--danger-wash); color: var(--danger); }
+.note-bar-sep { width: 1px; align-self: stretch; margin: .15rem .2rem; background: var(--line); }
+.note-bar-btn.is-on { background: var(--accent-wash); color: var(--accent-ink); }
+
+/* Text colour and highlight. The markdown stores a literal hex so it still
+   means something in Obsidian; in here the known ones are painted from the
+   theme instead, because a dark red on the dark theme is unreadable. */
+.cm-md-u { text-decoration: underline; text-underline-offset: .18em; }
+.cm-c-red   { color: var(--danger); }
+.cm-c-amber { color: var(--warn); }
+.cm-c-green { color: var(--accent-ink); }
+.cm-c-blue  { color: #1F4E79; }
+.cm-c-grey  { color: var(--muted); }
+.cm-hl-yellow, .cm-hl-green, .cm-hl-blue, .cm-hl-pink, .cm-hl-other {
+  border-radius: 3px; padding: .05em 0; color: var(--ink);
+}
+.cm-hl-yellow { background: var(--warn-wash); }
+.cm-hl-green  { background: var(--accent-wash); }
+.cm-hl-blue   { background: #D3E4F5; }
+.cm-hl-pink   { background: var(--danger-wash); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .cm-c-blue { color: #8FB8E0; }
+  :root:not([data-theme='light']) .cm-hl-blue { background: #1B3247; }
+}
+:root[data-theme='dark'] .cm-c-blue { color: #8FB8E0; }
+:root[data-theme='dark'] .cm-hl-blue { background: #1B3247; }
+
+.note-palette {
+  position: absolute; top: 100%; left: 0; margin-top: .25rem;
+  display: flex; flex-direction: column; gap: .3rem; padding: .45rem;
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.note-palette-row { display: flex; align-items: center; gap: .25rem; }
+.note-palette-label {
+  flex: 0 0 3rem; font-size: .7rem; color: var(--muted);
+}
+.note-swatch {
+  width: 1.35rem; height: 1.35rem; flex: none; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 4px;
+  font: inherit; font-size: .78rem; font-weight: 700; line-height: 1;
+  padding: 0; background: var(--surface);
+}
+.note-swatch:hover { border-color: var(--accent); }
+.note-swatch.is-text.c-red   { color: var(--danger); }
+.note-swatch.is-text.c-amber { color: var(--warn); }
+.note-swatch.is-text.c-green { color: var(--accent-ink); }
+.note-swatch.is-text.c-blue  { color: #1F4E79; }
+.note-swatch.is-text.c-grey  { color: var(--muted); }
+.note-swatch.hl-yellow { background: var(--warn-wash); }
+.note-swatch.hl-green  { background: var(--accent-wash); }
+.note-swatch.hl-blue   { background: #D3E4F5; }
+.note-swatch.hl-pink   { background: var(--danger-wash); }
+
+
+/* The `/` menu. CodeMirror's own classes, painted in the app's ink. */
+.cm-tooltip.cm-tooltip-autocomplete {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow); overflow: hidden;
+}
+/* !important: the base theme caps the list at 10em, which shows seven of
+   fifteen commands and makes the menu feel like it is hiding things. */
+.cm-tooltip-autocomplete > ul { font-family: var(--body); max-height: 21rem !important; }
+.cm-tooltip-autocomplete > ul > li {
+  display: flex; align-items: baseline; gap: .5rem;
+  padding: .35rem .7rem; font-size: .85rem; color: var(--ink);
+}
+/* !important because CodeMirror's base theme paints the selected row a bright
+   blue from a stylesheet it injects ahead of this one. */
+.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--accent-wash) !important; color: var(--accent-ink) !important;
+}
+.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail { color: var(--accent-ink); }
+.cm-tooltip-autocomplete .cm-completionDetail {
+  font-style: normal; font-size: .74rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cm-tooltip-autocomplete .cm-completionLabel { font-weight: 500; }
+/* The shortcut owns the right edge, so the keys line up down the menu whether
+   or not the command above happened to carry a hint. */
+.cm-tooltip-autocomplete .cm-completionKey {
+  flex: 0 0 auto; margin-left: auto;
+  font-family: var(--mono); font-size: .7rem;
+  color: var(--muted); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 3px; padding: 0 .3rem;
+}
+.cm-tooltip-autocomplete .cm-completionSection {
+  font-family: var(--mono); font-size: .66rem; letter-spacing: .08em;
+  color: var(--muted); background: var(--surface-2);
+  padding: .2rem .7rem; border-top: 1px solid var(--line);
+}
+
+/* Outline: overlays the note rather than taking a column from it — the pane
+   is already narrow, and this is something you open, use, and close. */
+.note-outline {
+  position: absolute; z-index: 30; inset: 0 0 auto 0; max-height: 100%;
+  overflow-y: auto; padding: .4rem;
+  background: var(--surface); border-bottom: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+}
+.outline-row {
+  display: flex; align-items: baseline; gap: .4rem; width: 100%;
+  font: inherit; font-size: .84rem; text-align: left; color: var(--ink-soft);
+  padding: .25rem .5rem; border: none; border-radius: 4px;
+  background: none; cursor: pointer;
+}
+.outline-row:hover { background: var(--surface-2); color: var(--ink); }
+.outline-row.is-here { background: var(--accent-wash); color: var(--accent-ink); font-weight: 500; }
+.outline-row.is-h1 { font-weight: 600; color: var(--ink); }
+.outline-row.is-h2 { padding-left: 1.2rem; }
+.outline-row.is-h3 { padding-left: 2rem; font-size: .8rem; }
+.outline-row.is-h4, .outline-row.is-h5, .outline-row.is-h6 { padding-left: 2.8rem; font-size: .78rem; }
+.outline-row.is-mark { padding-left: 1.2rem; }
+.outline-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outline-tag {
+  flex: none; font-family: var(--mono); font-size: .64rem; letter-spacing: .04em;
+  padding: .05rem .3rem; border-radius: 3px; color: #fff;
+}
+.outline-row.is-重點 .outline-tag { background: var(--accent); }
+.outline-row.is-疑問 .outline-tag { background: var(--warn); }
+.outline-row.is-考點 .outline-tag { background: var(--danger); }
+.tag.mark-重點 { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-wash); }
+.tag.mark-疑問 { border-color: var(--warn); color: var(--warn); background: var(--warn-wash); }
+.tag.mark-考點 { border-color: var(--danger); color: var(--danger); background: var(--danger-wash); }
+/* A mark is a block, not a phrase, so it keeps its own line breaks. */
+.hit .hit-snippet { white-space: pre-wrap; }
+
+
+
+
+/* progress */
+.progress { height: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); transition: width .25s ease; }
+
+.dropzone {
+  border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  padding: 1.5rem; text-align: center; color: var(--muted); font-size: .86rem;
+  background: var(--surface); cursor: pointer;
+}
+.dropzone.over { border-color: var(--accent); background: var(--accent-wash); color: var(--accent-ink); }
+
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: .8rem; }
+
+/* ── tabs ────────────────────────────────────────────────────────── */
+.tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--line); margin-bottom: 1.25rem; }
+.tab {
+  font-family: var(--body); font-size: .88rem; font-weight: 500;
+  padding: .5rem .85rem; border: 0; background: transparent; color: var(--muted);
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab:hover { color: var(--ink); }
+.tab.active { color: var(--accent-ink); border-bottom-color: var(--accent); }
+
+/* ── intake: record on one side, upload on the other ─────────────── */
+.intake { display: grid; gap: 1rem; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 52rem) { .intake { grid-template-columns: 1.2fr 1fr; } }
+.intake .dropzone { padding: 2rem 1.5rem; }
+
+/* ── live recording ──────────────────────────────────────────────── */
+.rec-live {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  padding: .7rem .9rem; border-radius: var(--radius);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.rec-dot { width: .6rem; height: .6rem; border-radius: 50%; background: var(--line-strong); flex: none; }
+.rec-dot.on { background: var(--danger); animation: rec-pulse 1.4s ease-in-out infinite; }
+@keyframes rec-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
+.rec-clock { font-size: 1.35rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.rec-meter {
+  flex: 1 1 8rem; min-width: 5rem; height: 6px; border-radius: 999px;
+  background: var(--line); overflow: hidden;
+}
+.rec-meter > div { height: 100%; background: var(--accent); transition: width .08s linear; }
+@media (prefers-reduced-motion: reduce) {
+  .rec-dot.on { animation: none }
+  .rec-meter > div { transition: none }
+}
+
+/* ── transient pane message ──────────────────────────────────────── */
+.pane-flash {
+  padding: .45rem .9rem; font-size: .82rem;
+  background: var(--accent-wash); color: var(--accent-ink);
+  border-bottom: 1px solid var(--accent);
+}
+
+/* ── pdf viewer ──────────────────────────────────────────────────── */
+.pdf-shell {
+  background: var(--surface); border-radius: 10px; border: 1px solid var(--line);
+  width: min(64rem, 100%); height: min(92vh, 100%);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .5);
+}
+.pdf-bar {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .6rem .9rem; border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+.pdf-body {
+  flex: 1; overflow: auto; padding: 1rem; background: var(--ground);
+  display: flex; justify-content: center; align-items: flex-start;
+}
+.pdf-canvas { background: #fff; box-shadow: var(--shadow); max-width: 100%; }
+
+/* Work-time slots schedule effort, not a meeting — they produce no file. */
+.slot-row.is-work { opacity: .78; }
+.slot-row.is-work select, .slot-row.is-work input { border-style: dashed; }
+
+/* A computed value, not a field — must not read as a disabled input. */
+.slot-hours {
+  flex: 0 0 auto; align-self: center; padding-top: 1.1rem;
+  font-size: .78rem; color: var(--muted); white-space: nowrap;
+}
+
+/* ── calendar ────────────────────────────────────────────────────── */
+.cal-bar {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  margin-bottom: 1rem; padding-bottom: .8rem; border-bottom: 1px solid var(--line);
+}
+.cal-title-text { font-family: var(--display); font-weight: 600; font-size: 1rem; min-width: 10rem; text-align: center; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; margin-bottom: .8rem; font-size: .78rem; color: var(--muted); }
+.cal-legend-item { display: inline-flex; align-items: center; gap: .35rem; }
+.cal-swatch { width: .6rem; height: .6rem; border-radius: 2px; flex: none; }
+
+/* shared marks */
+.cal-block, .cal-chip {
+  font-family: var(--body); text-align: left; cursor: pointer;
+  border: 1px solid var(--line); border-left-width: 3px;
+  background: var(--surface); color: var(--ink);
+  overflow: hidden; display: block;
+}
+.cal-block:hover, .cal-chip:hover { filter: brightness(.97); border-color: var(--muted); }
+.cal-block.is-canceled, .cal-chip.is-canceled { opacity: .5; text-decoration: line-through; }
+.cal-block.kind-work, .cal-chip.kind-work { border-style: dashed; border-left-style: solid; background: var(--surface-2); }
+
+.cal-block {
+  position: absolute; border-radius: 5px; padding: .18rem .35rem;
+  font-size: .74rem; line-height: 1.3;
+}
+.cal-block .cal-time { display: block; color: var(--muted); font-size: .68rem; }
+.cal-block .cal-title { display: block; font-weight: 500; }
+.cal-block .cal-detail { display: block; color: var(--muted); font-size: .68rem; }
+
+.cal-chip {
+  border-radius: 4px; padding: .1rem .3rem; font-size: .7rem; line-height: 1.45;
+  width: 100%; white-space: nowrap; text-overflow: ellipsis;
+}
+
+/* week view */
+.wk { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.wk-head, .wk-allday, .wk-body { display: grid; grid-template-columns: 3.6rem repeat(7, minmax(0, 1fr)); }
+.wk-head { border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.wk-day-head { padding: .4rem .3rem; text-align: center; border-left: 1px solid var(--line); }
+.wk-day-head.is-today { background: var(--accent-wash); }
+.wk-dow { display: block; font-size: .78rem; font-weight: 500; }
+.wk-date { display: block; font-size: .7rem; color: var(--muted); }
+.wk-allday { border-bottom: 1px solid var(--line); }
+.wk-allday-cell { border-left: 1px solid var(--line); padding: .25rem; display: flex; flex-direction: column; gap: .2rem; min-height: 1.8rem; }
+.wk-gutter { padding: .3rem; }
+.wk-body { overflow-y: auto; max-height: 62vh; }
+.wk-hours { position: relative; }
+.wk-hour {
+  font-size: .68rem; color: var(--muted); text-align: right;
+  padding-right: .35rem; transform: translateY(-.45em);
+}
+.wk-col {
+  position: relative; border-left: 1px solid var(--line);
+  background-image: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 100%);
+  background-repeat: repeat-y;
+}
+.wk-col.is-today { background-color: color-mix(in srgb, var(--accent-wash) 45%, transparent); }
+
+/* month view */
+.mo { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.mo-head, .mo-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mo-head { background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.mo-dow { padding: .4rem; text-align: center; font-size: .78rem; font-weight: 500; border-left: 1px solid var(--line); }
+.mo-dow:first-child { border-left: 0; }
+.mo-cell {
+  min-height: 6.2rem; border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+  padding: .25rem; display: flex; flex-direction: column; gap: .15rem; cursor: pointer;
+}
+.mo-cell:nth-child(7n + 1) { border-left: 0; }
+.mo-cell.is-outside { background: var(--surface-2); }
+.mo-cell.is-outside .mo-num { opacity: .45; }
+.mo-cell.is-today { background: var(--accent-wash); }
+.mo-num { font-size: .72rem; color: var(--muted); }
+.mo-cell.is-today .mo-num { color: var(--accent-ink); font-weight: 500; }
+.mo-more {
+  font: inherit; font-size: .68rem; color: var(--muted); text-align: left;
+  padding: .05rem .2rem; background: none; border: none; border-radius: 3px;
+  cursor: pointer; width: 100%;
+}
+.mo-more:hover { color: var(--accent-ink); background: var(--surface-2); }
+
+@media (max-width: 46rem) {
+  .wk-head, .wk-allday, .wk-body { grid-template-columns: 2.6rem repeat(7, minmax(3.4rem, 1fr)); }
+  .wk { overflow-x: auto; }
+  .mo-cell { min-height: 4.6rem; }
+}
+
+/* Deadlines are a different species from meetings — mark them, don't tint them. */
+.cal-block.kind-deadline, .cal-chip.kind-deadline {
+  border-left-width: 3px; border-style: solid;
+  background: var(--danger-wash); font-weight: 500;
+}
+
+/* ── assignments ─────────────────────────────────────────────────── */
+.asg { padding: 0; overflow: hidden; }
+.asg-head {
+  display: flex; align-items: center; gap: .8rem;
+  padding: .85rem 1.1rem; cursor: pointer;
+}
+.asg-head:hover { background: var(--surface-2); }
+.asg-detail { padding: 0 1.1rem 1.1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.asg-detail h3 { margin-top: 0; }
+
+/* ── search ──────────────────────────────────────────────────────── */
+.hit { border: 1px solid var(--line); font-family: var(--body); }
+.hit:hover { border-color: var(--accent); }
+.hit-snippet {
+  display: block; margin-top: .2rem; font-size: .88rem; line-height: 1.7;
+  color: var(--ink); word-break: break-word;
+}
+.hit-snippet mark {
+  background: var(--accent-wash); color: var(--accent-ink);
+  padding: 0 .12em; border-radius: 2px; font-weight: 500;
+}
+
+/* ── transcript corrections ──────────────────────────────────────── */
+.correction {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: .8rem 1rem; background: var(--surface);
+}
+.cor-before { text-decoration: line-through; color: var(--danger); }
+.cor-context { font-size: .92rem; line-height: 1.7; margin-top: .2rem; }
+
+/* ── glossary table ──────────────────────────────────────────────── */
+/* The one table in the app, so the styling lives with the feature. It scrolls
+   inside its own box: four columns of Chinese course names overflow a narrow
+   window long before the page itself does. */
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+table.gloss { border-collapse: collapse; width: 100%; min-width: 44rem; font-size: .88rem; }
+table.gloss th, table.gloss td {
+  text-align: left; padding: .55rem .75rem; border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+table.gloss thead th {
+  font-size: .74rem; font-weight: 500; letter-spacing: .06em; color: var(--muted);
+  background: var(--surface-2); white-space: nowrap;
+}
+table.gloss tbody tr:last-child td { border-bottom: none; }
+table.gloss tbody tr:hover { background: var(--surface-2); }
+table.gloss td.act, table.gloss th.act { text-align: right; white-space: nowrap; }
+table.gloss td:first-child { font-weight: 500; white-space: nowrap; }
+table.gloss .tag + .tag { margin-left: .3rem; }
+
+/* A term is a button because clicking it renames everywhere, but it should
+   read as the term itself, not as a control competing with the row's actions. */
+.linkish {
+  font: inherit; color: inherit; background: none; border: none; padding: 0;
+  cursor: text; border-bottom: 1px dashed var(--line-strong);
+}
+.linkish:hover { border-bottom-color: var(--accent); color: var(--accent-ink); }
+
+.uses { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.use {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .78rem; text-decoration: none; color: var(--ink-soft);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: .1rem .3rem .1rem .45rem;
+}
+.use:hover { border-color: var(--accent); color: var(--accent-ink); }
+.use .dot { width: .45rem; height: .45rem; border-radius: 50%; flex: none; }
+.use .x {
+  font: inherit; line-height: 1; color: var(--muted); background: none;
+  border: none; padding: 0 .15rem; cursor: pointer; border-radius: 3px;
+}
+.use .x:hover { background: var(--danger-wash); color: var(--danger); }
+/* Glossary chips. Shares the .use chip's shape so a term looks the same
+   wherever it is listed. */
+.chips {
+  display: flex; flex-wrap: wrap; gap: .35rem; align-items: center;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: .5rem .55rem; min-height: 2.6rem;
+}
+.chips:focus-within { border-color: var(--accent); }
+.chip {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .82rem; color: var(--ink-soft);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: .12rem .3rem .12rem .5rem;
+}
+.chip .x {
+  font: inherit; line-height: 1; color: var(--muted); background: none;
+  border: none; padding: 0 .15rem; cursor: pointer; border-radius: 3px;
+}
+.chip .x:hover { background: var(--danger-wash); color: var(--danger); }
+/* Grows to fill the row it lands on, so the caret is never in a 2rem box. */
+.chip-input {
+  flex: 1 1 10rem; min-width: 8rem; border: none; background: none;
+  padding: .1rem .15rem; font: inherit; font-size: .82rem;
+}
+.chip-input:focus { outline: none; box-shadow: none; }
+
+
+/* Fixed width, not auto: a select sized to its longest course name makes the
+   action column a different width on every row. */
+select.add-to { flex: 0 0 auto; width: 7rem; font-size: .78rem; padding: .28rem .5rem; }
+.btn.danger-text { color: var(--danger); }
+.btn.danger-text:hover:not(:disabled) { background: var(--danger-wash); color: var(--danger); }
+
+/* ── course requirements ─────────────────────────────────────────── */
+.grade-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.grade-head h3 { margin: 0; font-size: .92rem; }
+.grade-row {
+  display: grid; gap: .4rem; align-items: center;
+  grid-template-columns: minmax(0, 1fr) 5rem minmax(0, 1fr) auto;
+}
+@media (max-width: 44rem) { .grade-row { grid-template-columns: minmax(0, 1fr) 5rem; } }
+/* A number and its unit read as one field, so they sit in one box. */
+.pct { display: flex; align-items: center; gap: .25rem; }
+.pct input { text-align: right; }
+
+/* ── weekly plan ─────────────────────────────────────────────────── */
+.plan-item {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .3rem .45rem; border-radius: 6px; border: 1px solid transparent;
+}
+.plan-item:hover { background: var(--surface-2); }
+.plan-item input[type='checkbox'] { flex: none; width: 1rem; height: 1rem; accent-color: var(--accent); }
+.plan-item .plan-title { flex: 1 1 8rem; border-color: transparent; background: transparent; }
+.plan-item .plan-title:focus { border-color: var(--accent); background: var(--surface); }
+.plan-item .pct { flex: 0 0 4.5rem; }
+.plan-item.is-done .plan-title { color: var(--muted); text-decoration: line-through; }
+.ws-plan { padding: 0 1.25rem 1rem; }
+
+/* ── weekly progress on the session list ─────────────────────────── */
+/* The left edge carries the state so the row stays plain text otherwise; the
+   week list is scanned far more often than it is read. */
+.list-item.wk-done { border-left: 3px solid var(--accent); }
+.list-item.wk-doing { border-left: 3px solid var(--warn); }
+.list-item.wk-unplanned-past { border-left: 3px solid var(--danger); }
+.list-item.wk-off { opacity: .6; }
+
+/* ── setup banner ────────────────────────────────────────────────── */
+/* A reminder, not a gate: notes need none of this, so it sits above the page
+   and can be dismissed rather than standing in front of it. */
+.setup-banner {
+  border: 1px solid var(--accent); background: var(--accent-wash);
+  border-radius: var(--radius); padding: .9rem 1.1rem; margin-bottom: 1.5rem;
+}
+.setup-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.setup-steps li {
+  display: flex; align-items: center; gap: .6rem;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: .5rem .7rem;
+}
+.setup-steps .mark {
+  flex: none; width: 1.1rem; height: 1.1rem; border-radius: 50%;
+  border: 1px solid var(--line-strong); display: grid; place-items: center;
+  font-size: .7rem; color: var(--surface);
+}
+.setup-steps .is-done .mark { background: var(--accent); border-color: var(--accent); color: #fff; }
+.setup-steps .what { display: block; font-size: .88rem; font-weight: 500; }
+.setup-steps .why { display: block; font-size: .78rem; color: var(--muted); line-height: 1.5; }
+.setup-steps .is-done .what { color: var(--muted); font-weight: 400; }
+
+/* ── colour picker ───────────────────────────────────────────────── */
+.swatches { display: flex; gap: .35rem; flex-wrap: wrap; }
+.swatch-pick {
+  width: 1.6rem; height: 1.6rem; border-radius: 5px; cursor: pointer;
+  border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12);
+}
+.swatch-pick.active { border-color: var(--ink); }
+
+/* A time value from before <input type="time"> existed here: shown as text so
+   the original is visible rather than silently blanked. */
+input.is-bad { border-color: var(--danger); background: var(--danger-wash); }
+input[type='time'] {
+  font-family: var(--body); font-size: .88rem; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 6px; padding: .45rem .6rem; width: 100%;
+}
+input[type='time']:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+/* A link with nowhere to go: dimmed and inert, but still occupying its place so
+   the toolbar does not shift as you move through a course. */
+.btn.is-off { opacity: .45; pointer-events: none; }
+
+/* ── confirmation ────────────────────────────────────────────────── */
+.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger-solid:hover:not(:disabled) { filter: brightness(1.08); background: var(--danger); }
+.confirm-body { font-size: .9rem; color: var(--ink-soft); line-height: 1.7; }
+/* The header of a calendar item's card: colour, what it is, when it is. */
+.item-card-head { display: flex; align-items: center; gap: .75rem; margin-bottom: .9rem; }
+.item-card-head .mono { display: block; font-size: .9rem; color: var(--ink); }
+.item-card-head .sub { display: block; font-size: .8rem; color: var(--muted); margin-top: .15rem; }
+/* Natural-width buttons: inside .row they stretch, which turned three short
+   verbs into three wide slabs and pushed 刪除 onto a line of its own. */
+.item-card-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .2rem; }
+.item-card-actions .btn { flex: 0 0 auto; }
+.item-card-actions .spacer { flex: 1; }
+
+.confirm-body ul { margin: .5rem 0 0; padding-left: 1.15rem; }
+.confirm-body li { margin-bottom: .2rem; }
+.confirm-final { margin: .8rem 0 0; font-size: .85rem; font-weight: 500; color: var(--danger); }
