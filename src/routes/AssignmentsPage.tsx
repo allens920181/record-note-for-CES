@@ -163,7 +163,38 @@ export function AssignmentsPage() {
           <div className="empty">載入中…</div>
         ) : rows.length === 0 ? (
           <div className="empty">
-            <p>{showDone ? '還沒有任何作業。' : '沒有未完成的作業。'}</p>
+            {courses.length === 0 ? (
+              <>
+                <p>
+                  這個學期還沒有課程。作業要掛在某一門課底下，所以得先有課。
+                </p>
+                {/* Not「新增作業」— that button would fail, and offering an
+                    action that cannot work is worse than offering none. */}
+                <Link className="btn primary" to={`/term/${termId}`}>
+                  去建立一門課 →
+                </Link>
+              </>
+            ) : showDone ? (
+              <>
+                <p>這個學期還沒有任何作業。</p>
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    setForm({ courseId: courseFilter || courses[0].id, title: '', due: todayISO() })
+                    setCreating(true)
+                  }}
+                >
+                  新增作業
+                </button>
+              </>
+            ) : (
+              <>
+                <p>沒有未完成的作業。</p>
+                <button className="btn" onClick={() => setShowDone(true)}>
+                  看全部（含已完成）
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="stack">

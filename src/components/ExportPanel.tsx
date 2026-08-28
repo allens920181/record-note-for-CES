@@ -4,6 +4,7 @@ import { exportTermMarkdown } from '../export/markdown'
 import { backupBlob, backupFileName, buildBackup, downloadBlob, restoreBackup } from '../export/backup'
 import { TermPicker, useTermChoice } from './TermPicker'
 import { useConfirm } from './ConfirmProvider'
+import { Link } from 'react-router-dom'
 
 type Msg = { kind: 'ok' | 'err'; text: string } | null
 
@@ -37,6 +38,12 @@ export function ExportPanel() {
         <strong>備份</strong>是一個 JSON 檔，含結構、逐字稿與筆記。
         音檔本來就在你選的資料夾裡，那就是它自己的備份，不重複打包。
       </p>
+
+      {terms && terms.length === 0 && (
+        <div className="notice warn" style={{ marginBottom: '.9rem' }}>
+          還沒有學期可以匯出。<Link to="/">先建立一個學期</Link>，裡面有課程與筆記之後再回來。
+        </div>
+      )}
 
       <div className="row" style={{ gap: '.6rem', alignItems: 'flex-end' }}>
         <TermPicker

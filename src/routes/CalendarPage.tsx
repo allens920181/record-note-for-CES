@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   addWorkBlock,
@@ -47,6 +47,7 @@ export function CalendarPage() {
   const [termId, setTermId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [blocked, setBlocked] = useState(false)
 
   const { termId: chosenTerm, setTermId: chooseTerm, terms } = useTermChoice()
   const activeTermId = termId ?? chosenTerm ?? null
@@ -115,7 +116,9 @@ export function CalendarPage() {
   function openDraft(date: string, startMin: number) {
     const first = courses?.[0]
     if (!first) {
-      setMessage('這個學期還沒有課程，請先建立一門課。')
+      // A refusal, not an achievement — this used to be rendered in the success
+      // colour, under a heading that promises clicking an empty slot works.
+      setBlocked(true)
       return
     }
     setDraft({
@@ -247,6 +250,18 @@ export function CalendarPage() {
         {message && (
           <div className="notice ok" style={{ marginBottom: '1rem' }}>
             {message}
+          </div>
+        )}
+
+        {blocked && (
+          <div className="notice warn" style={{ marginBottom: '1rem' }}>
+            這個學期還沒有課程，行程要掛在某一門課底下。
+            {activeTermId && (
+              <>
+                {' '}
+                <Link to={`/term/${activeTermId}`}>去建立一門課 →</Link>
+              </>
+            )}
           </div>
         )}
 

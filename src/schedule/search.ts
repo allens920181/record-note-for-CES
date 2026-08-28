@@ -54,6 +54,9 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   if (needle.length === 0) return []
   const lower = needle.toLowerCase()
   const limit = options.limit ?? 200
+  // Omitting `kinds` means all three; passing an empty array means none, and
+  // the caller is expected to say so rather than render it as "no results
+  // found" — turning every filter off is a different fact from finding nothing.
   const kinds = options.kinds ?? ['transcript', 'note', 'file']
 
   const courses = await db.courses.toArray()

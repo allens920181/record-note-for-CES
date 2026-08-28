@@ -203,15 +203,25 @@ export function CoursePage() {
                   新增一次{MEETING_KIND_LABEL[k]}
                 </button>
               ))}
-              <button
-                className="btn"
-                style={{ flex: '0 0 auto' }}
-                disabled={slots.length === 0}
-                title={slots.length === 0 ? '先到「課表」設定每週固定的時段' : undefined}
-                onClick={generate}
-              >
-                依課表產生整學期
-              </button>
+              {/* Only offered when it can work. The reason it cannot is a line
+                  on screen with a link, not a `title` — which touch and keyboard
+                  users never see at all. */}
+              {slots.length > 0 ? (
+                <button className="btn" style={{ flex: '0 0 auto' }} onClick={generate}>
+                  依課表產生整學期
+                </button>
+              ) : (
+                sessions !== undefined &&
+                sessions.length > 0 && (
+                  <span className="small muted" style={{ flex: '0 0 auto', alignSelf: 'center' }}>
+                    還沒有每週固定的時段，
+                    <button className="linkish" onClick={() => setTab('setup')}>
+                      去設課表
+                    </button>
+                    後就能一次產生整學期。
+                  </span>
+                )
+              )}
             </div>
 
             {sessions === undefined ? (
@@ -219,9 +229,36 @@ export function CoursePage() {
             ) : sessions.length === 0 ? (
               <div className="empty">
                 <p>
-                  還沒有任何週次。每週固定的課設好課表後按「依課表產生整學期」；
+                  還沒有任何週次。每週固定的課先設好課表，就能一次產生整學期；
                   只開一次的聚會用「新增一次…」挑日期。
                 </p>
+                {/* The button this used to name lives on another tab, which is
+                    the one thing an empty state must never do. */}
+                <div className="row" style={{ gap: '.5rem', justifyContent: 'center' }}>
+                  {slots.length === 0 ? (
+                    <button
+                      className="btn primary"
+                      style={{ flex: '0 0 auto' }}
+                      onClick={() => setTab('setup')}
+                    >
+                      去設定課表
+                    </button>
+                  ) : (
+                    <button className="btn primary" style={{ flex: '0 0 auto' }} onClick={generate}>
+                      依課表產生整學期
+                    </button>
+                  )}
+                  <button
+                    className="btn"
+                    style={{ flex: '0 0 auto' }}
+                    onClick={() => {
+                      setAddDate(term?.startDate ?? todayISO())
+                      setAdding('lecture')
+                    }}
+                  >
+                    新增一次聚會
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="stack">

@@ -23,6 +23,15 @@ export function SearchPage() {
   const [elapsed, setElapsed] = useState(0)
 
   const courses = useLiveQuery(() => db.courses.toArray(), [])
+  // Distinguishes "nothing matched" from "there is nothing here to match".
+  const corpus = useLiveQuery(async () => {
+    const [tx, notes, files] = await Promise.all([
+      db.transcripts.count(),
+      db.notes.count(),
+      db.attachments.count(),
+    ])
+    return tx + notes + files
+  }, [])
 
   const timer = useRef<number | null>(null)
   const run = useMemo(
@@ -126,13 +135,44 @@ export function SearchPage() {
 
         {busy && <div className="notice">搜尋中…</div>}
 
+        {!busy && hits === null && (
+          <div className="empty">
+            <p>
+              一次搜尋所有課程的逐字稿、筆記與 PDF 文字。
+              <br />
+              中文沒有空白可切詞，所以是整段比對——直接打你記得的那句話就好。
+            </p>
+            {corpus === 0 && (
+              <p className="small">
+                （這台電腦上還沒有內容可以搜尋。先錄一堂課，或在某一週寫幾行筆記。）
+              </p>
+            )}
+          </div>
+        )}
+
         {!busy && hits !== null && (
           <>
             <p className="small muted" style={{ marginBottom: '.8rem' }}>
               找到 {hits.length} 筆{hits.length >= 200 ? '（只顯示前 200 筆）' : ''} · {elapsed} ms
             </p>
             {hits.length === 0 ? (
-              <div className="empty">沒有找到「{query}」。</div>
+              <div className="empty">
+                {kinds.length === 0 ? (
+                  <p>
+                    三種類型都關掉了，所以不會有任何結果。
+                    <br />
+                    上面至少打開一種：逐字稿、筆記或檔案。
+                  </p>
+                ) : corpus === 0 ? (
+                  <p>
+                    這台電腦上還沒有任何可以搜尋的內容。
+                    <br />
+                    搜尋找的是逐字稿、筆記與 PDF 的文字——先錄一堂課或寫幾行筆記。
+                  </p>
+                ) : (
+                  <p>沒有找到「{query}」。試試更短的關鍵字，或換一種說法。</p>
+                )}
+              </div>
             ) : (
               <div className="stack">
                 {hits.map((hit) => (
