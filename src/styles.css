@@ -589,6 +589,16 @@ input[type='time']:focus { outline: 2px solid var(--accent); outline-offset: -1p
 .btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn.danger-solid:hover:not(:disabled) { filter: brightness(1.08); background: var(--danger); }
 .confirm-body { font-size: .9rem; color: var(--ink-soft); line-height: 1.7; }
+/* The header of a calendar item's card: colour, what it is, when it is. */
+.item-card-head { display: flex; align-items: center; gap: .75rem; margin-bottom: .9rem; }
+.item-card-head .mono { display: block; font-size: .9rem; color: var(--ink); }
+.item-card-head .sub { display: block; font-size: .8rem; color: var(--muted); margin-top: .15rem; }
+/* Natural-width buttons: inside .row they stretch, which turned three short
+   verbs into three wide slabs and pushed 刪除 onto a line of its own. */
+.item-card-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .2rem; }
+.item-card-actions .btn { flex: 0 0 auto; }
+.item-card-actions .spacer { flex: 1; }
+
 .confirm-body ul { margin: .5rem 0 0; padding-left: 1.15rem; }
 .confirm-body li { margin-bottom: .2rem; }
 .confirm-final { margin: .8rem 0 0; font-size: .85rem; font-weight: 500; color: var(--danger); }

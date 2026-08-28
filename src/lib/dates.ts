@@ -84,11 +84,22 @@ export function formatMonthTitle(iso: string): string {
   return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月`
 }
 
+/**
+ * A week's title.
+ *
+ * The year used to be dropped whenever the week straddled two months — about
+ * one week in three — while the month view always names it. Paging forward far
+ * enough then left "8/30 – 9/5" on screen with nothing to say which year it
+ * belonged to, and an empty grid looks the same in every one of them.
+ */
 export function formatRange(from: string, to: string): string {
   const a = fromISO(from)
   const b = fromISO(to)
-  const sameMonth = a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()
-  return sameMonth
-    ? `${a.getFullYear()} 年 ${a.getMonth() + 1} 月 ${a.getDate()}–${b.getDate()} 日`
-    : `${a.getMonth() + 1}/${a.getDate()} – ${b.getMonth() + 1}/${b.getDate()}`
+  if (a.getFullYear() !== b.getFullYear()) {
+    return `${a.getFullYear()}/${a.getMonth() + 1}/${a.getDate()} – ${b.getFullYear()}/${b.getMonth() + 1}/${b.getDate()}`
+  }
+  if (a.getMonth() === b.getMonth()) {
+    return `${a.getFullYear()} 年 ${a.getMonth() + 1} 月 ${a.getDate()}–${b.getDate()} 日`
+  }
+  return `${a.getFullYear()} 年 ${a.getMonth() + 1}/${a.getDate()} – ${b.getMonth() + 1}/${b.getDate()}`
 }

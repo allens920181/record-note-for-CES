@@ -15,6 +15,7 @@ import {
   addMonths,
   formatMonthTitle,
   formatRange,
+  minutesOf,
   startOfWeek,
   timeOf,
   todayISO,
@@ -28,6 +29,7 @@ import { WeekCalendar } from '../components/WeekCalendar'
 import { MonthCalendar } from '../components/MonthCalendar'
 import { TermPicker, useTermChoice } from '../components/TermPicker'
 import { TimeField } from '../components/TimeField'
+import { CalendarItemCard } from '../components/CalendarItemCard'
 
 type View = 'week' | 'month'
 
@@ -38,6 +40,8 @@ interface Draft {
   date: string
   start: string
   end: string
+  /** False while the time is still the app's guess rather than the reader's. */
+  timed: boolean
 }
 
 export function CalendarPage() {
@@ -46,6 +50,7 @@ export function CalendarPage() {
   const [anchor, setAnchor] = useState(todayISO())
   const [termId, setTermId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [shownKey, setShownKey] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [blocked, setBlocked] = useState(false)
 
@@ -107,13 +112,37 @@ export function CalendarPage() {
     [range.from, range.to, courses, sessions, workBlocks, assignments],
   )
 
+  // Holding the clicked object would freeze the card at the moment of the
+  // click: cancelling a class, or moving it, would leave the card showing the
+  // old state until it was closed and opened again. Look it up by key instead,
+  // which also closes the card by itself once the item is deleted.
+  const shown = useMemo(
+    () => (shownKey ? (items.find((i) => i.key === shownKey) ?? null) : null),
+    [items, shownKey],
+  )
+
   useEffect(() => {
     if (!message) return
     const t = window.setTimeout(() => setMessage(null), 4000)
     return () => window.clearTimeout(t)
   }, [message])
 
-  function openDraft(date: string, startMin: number) {
+  /**
+   * The hour a new item starts on.
+   *
+   * The week grid knows it from where the click landed. The month grid has no
+   * hours to click, and used to hand over a hardcoded 09:00 — a time nothing in
+   * this app ever happens at, so every month-view entry had to be retyped.
+   * Ask the course how it usually meets instead.
+   */
+  function usualStart(courseId: string, kind: ItemKind): number {
+    const course = courses?.find((c) => c.id === courseId)
+    const slot =
+      course?.slots.find((s) => (s.kind ?? 'lecture') === kind) ?? course?.slots[0]
+    return minutesOf(slot?.start) ?? 19 * 60
+  }
+
+  function openDraft(date: string, startMin: number | null) {
     const first = courses?.[0]
     if (!first) {
       // A refusal, not an achievement — this used to be rendered in the success
@@ -121,17 +150,27 @@ export function CalendarPage() {
       setBlocked(true)
       return
     }
+    const from = startMin ?? usualStart(first.id, 'lecture')
     setDraft({
       courseId: first.id,
       kind: 'lecture',
       repeat: 'weekly',
       date,
-      start: timeOf(startMin),
-      end: timeOf(Math.min(23 * 60 + 59, startMin + 120)),
+      start: timeOf(from),
+      end: timeOf(Math.min(23 * 60 + 59, from + 120)),
+      // Only a time the reader has not touched may be re-derived under them.
+      timed: startMin !== null,
     })
   }
 
-  function openItem(item: CalendarItem) {
+  /** Re-derives the untouched time when the course or the kind changes. */
+  function retime(next: Draft): Draft {
+    if (next.timed) return next
+    const from = usualStart(next.courseId, next.kind)
+    return { ...next, start: timeOf(from), end: timeOf(Math.min(23 * 60 + 59, from + 120)) }
+  }
+
+  function goTo(item: CalendarItem) {
     // The term travels with the link: the assignments page scopes to one term,
     // and a deadline from any other one used to land on a page that had already
     // filtered it out — a click that visibly did nothing.
@@ -283,17 +322,28 @@ export function CalendarPage() {
             weekStart={range.from}
             items={items}
             onPickSlot={openDraft}
-            onOpenItem={openItem}
+            onOpenItem={(item) => setShownKey(item.key)}
           />
         ) : (
           <MonthCalendar
             anchor={anchor}
             items={items}
-            onPickDay={(date) => openDraft(date, 9 * 60)}
-            onOpenItem={openItem}
+            onPickDay={(date) => openDraft(date, null)}
+            onOpenItem={(item) => setShownKey(item.key)}
           />
         )}
       </main>
+
+      {shown && (
+        <CalendarItemCard
+          item={shown}
+          onClose={() => setShownKey(null)}
+          onOpen={(item) => {
+            setShownKey(null)
+            goTo(item)
+          }}
+        />
+      )}
 
       {draft && (
         <Modal
@@ -307,7 +357,7 @@ export function CalendarPage() {
             <select
               id="d-course"
               value={draft.courseId}
-              onChange={(e) => setDraft({ ...draft, courseId: e.target.value })}
+              onChange={(e) => setDraft(retime({ ...draft, courseId: e.target.value }))}
             >
               {(courses ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
@@ -323,7 +373,7 @@ export function CalendarPage() {
               <select
                 id="d-kind"
                 value={draft.kind}
-                onChange={(e) => setDraft({ ...draft, kind: e.target.value as ItemKind })}
+                onChange={(e) => setDraft(retime({ ...draft, kind: e.target.value as ItemKind }))}
               >
                 <option value="lecture">正課</option>
                 <option value="discussion">分組討論</option>
@@ -362,13 +412,13 @@ export function CalendarPage() {
               id="d-start"
               label="開始"
               value={draft.start}
-              onChange={(v) => setDraft({ ...draft, start: v })}
+              onChange={(v) => setDraft({ ...draft, start: v, timed: true })}
             />
             <TimeField
               id="d-end"
               label="結束"
               value={draft.end}
-              onChange={(v) => setDraft({ ...draft, end: v })}
+              onChange={(v) => setDraft({ ...draft, end: v, timed: true })}
             />
           </div>
 
