@@ -8,7 +8,13 @@ import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { TIMESTAMP_TOKEN, formatTime, parseTime } from '../lib/time'
 import { richMarkdown } from '../editor/richMarkdown'
 import { slashMenu } from '../editor/slashMenu'
-import { NOTE_COMMANDS, toggleLinePrefix, wrapSelection } from '../editor/commands'
+import { NOTE_COMMANDS, toggleLinePrefix, wrapSelection, wrapWith } from '../editor/commands'
+import {
+  HIGHLIGHTS,
+  TEXT_COLORS,
+  UNDERLINE_CLOSE,
+  UNDERLINE_OPEN,
+} from '../editor/inline'
 import { keyLabel } from '../editor/keys'
 import type { NoteContext } from '../editor/commands'
 import { MARK_LINE, NOTE_MARKS } from '../editor/marks'
@@ -142,8 +148,15 @@ const theme = EditorView.theme({
   '.cm-placeholder': { color: 'var(--muted)' },
 })
 
-/** The handful of commands worth a button when text is selected. */
-const BAR = ['bold', 'italic', 'code', 'h2', 'quote', 'todo'] as const
+/**
+ * What the selection bar carries.
+ *
+ * Inline only — things that act on the words you highlighted. Headings, lists
+ * and quotes act on whole lines and live in the `/` menu, which keeps one rule
+ * a reader can hold: **選取工具列管字，斜線選單管段落**. It also stops the bar
+ * growing wider than the pane it floats in.
+ */
+const BAR = ['bold', 'italic', 'underline', 'strike', 'code'] as const
 
 export function NoteEditor({
   ref,
@@ -157,6 +170,7 @@ export function NoteEditor({
   const host = useRef<HTMLDivElement | null>(null)
   const view = useRef<EditorView | null>(null)
   const [bar, setBar] = useState<{ top: number; left: number } | null>(null)
+  const [palette, setPalette] = useState(false)
 
   // Callbacks live in refs so changing them never tears down the editor,
   // which would drop the cursor and undo history mid-sentence.
@@ -222,6 +236,16 @@ export function NoteEditor({
             },
             { key: 'Mod-b', preventDefault: true, run: (e) => (wrapSelection(e, '**'), true) },
             { key: 'Mod-i', preventDefault: true, run: (e) => (wrapSelection(e, '*'), true) },
+            {
+              key: 'Mod-u',
+              preventDefault: true,
+              run: (e) => (wrapWith(e, UNDERLINE_OPEN, UNDERLINE_CLOSE), true),
+            },
+            {
+              key: 'Mod-Shift-x',
+              preventDefault: true,
+              run: (e) => (wrapSelection(e, '~~'), true),
+            },
             { key: 'Mod-1', preventDefault: true, run: (e) => (toggleLinePrefix(e, '# '), true) },
             { key: 'Mod-2', preventDefault: true, run: (e) => (toggleLinePrefix(e, '## '), true) },
             { key: 'Mod-3', preventDefault: true, run: (e) => (toggleLinePrefix(e, '### '), true) },
@@ -250,7 +274,10 @@ export function NoteEditor({
               // The floating bar follows the selection, and only exists while
               // there is one — an always-on toolbar would eat height the pane
               // does not have.
-              if (range.empty) setBar(null)
+              if (range.empty) {
+                setBar(null)
+                setPalette(false)
+              }
               else {
                 const coords = u.view.coordsAtPos(range.from)
                 const box = u.view.dom.getBoundingClientRect()
@@ -316,6 +343,14 @@ export function NoteEditor({
             ) : null
           })}
           <span className="note-bar-sep" />
+          <button
+            className={`note-bar-btn${palette ? ' is-on' : ''}`}
+            title="字色與螢光筆"
+            onClick={() => setPalette((v) => !v)}
+          >
+            顏色 ▾
+          </button>
+          <span className="note-bar-sep" />
           {NOTE_MARKS.map((kind) => (
             <button
               key={kind}
@@ -326,6 +361,53 @@ export function NoteEditor({
               {kind}
             </button>
           ))}
+
+          {palette && (
+            <div className="note-palette">
+              <div className="note-palette-row">
+                <span className="note-palette-label">字色</span>
+                {TEXT_COLORS.map((swatch) => (
+                  <button
+                    key={swatch.id}
+                    className={`note-swatch is-text c-${swatch.id}`}
+                    title={`字色：${swatch.label}`}
+                    aria-label={`字色：${swatch.label}`}
+                    onClick={() => {
+                      runCommand(`color-${swatch.id}`)
+                      setPalette(false)
+                    }}
+                  >
+                    A
+                  </button>
+                ))}
+              </div>
+              <div className="note-palette-row">
+                <span className="note-palette-label">螢光筆</span>
+                {HIGHLIGHTS.map((swatch) => (
+                  <button
+                    key={swatch.id}
+                    className={`note-swatch hl-${swatch.id}`}
+                    title={`螢光筆：${swatch.label}`}
+                    aria-label={`螢光筆：${swatch.label}`}
+                    onClick={() => {
+                      runCommand(`hl-${swatch.id}`)
+                      setPalette(false)
+                    }}
+                  />
+                ))}
+                <button
+                  className="note-bar-btn"
+                  title="把選取範圍的顏色與底線拿掉"
+                  onClick={() => {
+                    runCommand('clear')
+                    setPalette(false)
+                  }}
+                >
+                  清除
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

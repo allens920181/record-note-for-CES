@@ -329,6 +329,58 @@ a.list-item:hover { border-color: var(--accent); }
 .note-bar-btn.is-疑問:hover { background: var(--warn-wash); color: var(--warn); }
 .note-bar-btn.is-考點:hover { background: var(--danger-wash); color: var(--danger); }
 .note-bar-sep { width: 1px; align-self: stretch; margin: .15rem .2rem; background: var(--line); }
+.note-bar-btn.is-on { background: var(--accent-wash); color: var(--accent-ink); }
+
+/* Text colour and highlight. The markdown stores a literal hex so it still
+   means something in Obsidian; in here the known ones are painted from the
+   theme instead, because a dark red on the dark theme is unreadable. */
+.cm-md-u { text-decoration: underline; text-underline-offset: .18em; }
+.cm-c-red   { color: var(--danger); }
+.cm-c-amber { color: var(--warn); }
+.cm-c-green { color: var(--accent-ink); }
+.cm-c-blue  { color: #1F4E79; }
+.cm-c-grey  { color: var(--muted); }
+.cm-hl-yellow, .cm-hl-green, .cm-hl-blue, .cm-hl-pink, .cm-hl-other {
+  border-radius: 3px; padding: .05em 0; color: var(--ink);
+}
+.cm-hl-yellow { background: var(--warn-wash); }
+.cm-hl-green  { background: var(--accent-wash); }
+.cm-hl-blue   { background: #D3E4F5; }
+.cm-hl-pink   { background: var(--danger-wash); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .cm-c-blue { color: #8FB8E0; }
+  :root:not([data-theme='light']) .cm-hl-blue { background: #1B3247; }
+}
+:root[data-theme='dark'] .cm-c-blue { color: #8FB8E0; }
+:root[data-theme='dark'] .cm-hl-blue { background: #1B3247; }
+
+.note-palette {
+  position: absolute; top: 100%; left: 0; margin-top: .25rem;
+  display: flex; flex-direction: column; gap: .3rem; padding: .45rem;
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.note-palette-row { display: flex; align-items: center; gap: .25rem; }
+.note-palette-label {
+  flex: 0 0 3rem; font-size: .7rem; color: var(--muted);
+}
+.note-swatch {
+  width: 1.35rem; height: 1.35rem; flex: none; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 4px;
+  font: inherit; font-size: .78rem; font-weight: 700; line-height: 1;
+  padding: 0; background: var(--surface);
+}
+.note-swatch:hover { border-color: var(--accent); }
+.note-swatch.is-text.c-red   { color: var(--danger); }
+.note-swatch.is-text.c-amber { color: var(--warn); }
+.note-swatch.is-text.c-green { color: var(--accent-ink); }
+.note-swatch.is-text.c-blue  { color: #1F4E79; }
+.note-swatch.is-text.c-grey  { color: var(--muted); }
+.note-swatch.hl-yellow { background: var(--warn-wash); }
+.note-swatch.hl-green  { background: var(--accent-wash); }
+.note-swatch.hl-blue   { background: #D3E4F5; }
+.note-swatch.hl-pink   { background: var(--danger-wash); }
+
 
 /* The `/` menu. CodeMirror's own classes, painted in the app's ink. */
 .cm-tooltip.cm-tooltip-autocomplete {

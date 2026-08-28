@@ -3,6 +3,7 @@ import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import type { Range } from '@codemirror/state'
 import { MARK_LINE } from './marks'
+import { classOf, closerFor, literalColorOf } from './inline'
 
 /**
  * Draws markdown as the thing it means, inside the editor.
@@ -83,6 +84,9 @@ function build(view: EditorView): DecorationSet {
   const deco: Range<Decoration>[] = []
   const active = activeLines(view)
   const { doc } = view.state
+  // Opening and closing tags are separate nodes with plain text between them,
+  // so they are paired up after the walk rather than during it.
+  const tags: Array<{ from: number; to: number; text: string }> = []
 
   /** Hide a syntax marker, unless the reader is on that line. */
   const marker = (from: number, to: number) => {
@@ -153,6 +157,13 @@ function build(view: EditorView): DecorationSet {
             )
             break
           }
+          case 'HTMLTag':
+            tags.push({
+              from: node.from,
+              to: node.to,
+              text: doc.sliceString(node.from, node.to),
+            })
+            break
           case 'HorizontalRule':
             deco.push(Decoration.line({ class: 'cm-md-rule' }).range(doc.lineAt(node.from).from))
             break
@@ -161,6 +172,39 @@ function build(view: EditorView): DecorationSet {
         }
       },
     })
+  }
+
+  // ── inline HTML: <u>, colour spans, highlights ─────────────────────
+  const open: Array<{ at: number; end: number; text: string; closer: string }> = []
+  for (const tag of tags) {
+    const closer = closerFor(tag.text)
+    const last = open.length > 0 ? open[open.length - 1] : null
+    if (last && tag.text === last.closer) {
+      const cls = classOf(last.text)
+      if (cls) {
+        const literal = literalColorOf(last.text)
+        deco.push(
+          (literal
+            ? Decoration.mark({
+                class: cls,
+                attributes: {
+                  style: literal.color
+                    ? `color:${literal.color}`
+                    : `background:${literal.background}`,
+                },
+              })
+            : Decoration.mark({ class: cls })
+          ).range(last.end, tag.from),
+        )
+        marker(last.at, last.end)
+        marker(tag.from, tag.to)
+      }
+      open.pop()
+      continue
+    }
+    if (closer && classOf(tag.text)) {
+      open.push({ at: tag.from, end: tag.to, text: tag.text, closer })
+    }
   }
 
   // Callouts are a property of consecutive quote lines, which the syntax tree

@@ -3,6 +3,15 @@ import { moveLineDown, moveLineUp } from '@codemirror/commands'
 import { EditorView } from '@codemirror/view'
 import { NOTE_MARKS } from './marks'
 import type { NoteMark } from './marks'
+import {
+  HIGHLIGHTS,
+  INLINE_WRAPPERS,
+  TEXT_COLORS,
+  UNDERLINE_CLOSE,
+  UNDERLINE_OPEN,
+  highlightTag,
+  textColorTag,
+} from './inline'
 
 /**
  * Everything the note editor can do to the text, in one list.
@@ -97,40 +106,102 @@ export function toggleLinePrefix(view: EditorView, prefix: string) {
   view.focus()
 }
 
-/** Wraps the selection in `marker`, or peels it off when it is already there. */
-export function wrapSelection(view: EditorView, marker: string) {
+/**
+ * Wraps the selection in `open` … `close`, or peels them off when already there.
+ *
+ * Asymmetric because underline and colour are HTML tags — `<u>` and `</u>` are
+ * not the same string, unlike `**`.
+ */
+export function wrapWith(view: EditorView, open: string, close: string) {
   const { state } = view
   const range = state.selection.main
   const inner = state.sliceDoc(range.from, range.to)
-  const len = marker.length
 
   const around =
-    state.sliceDoc(Math.max(0, range.from - len), range.from) === marker &&
-    state.sliceDoc(range.to, Math.min(state.doc.length, range.to + len)) === marker
+    state.sliceDoc(Math.max(0, range.from - open.length), range.from) === open &&
+    state.sliceDoc(range.to, Math.min(state.doc.length, range.to + close.length)) === close
 
   if (around) {
     view.dispatch({
       changes: [
-        { from: range.from - len, to: range.from, insert: '' },
-        { from: range.to, to: range.to + len, insert: '' },
+        { from: range.from - open.length, to: range.from, insert: '' },
+        { from: range.to, to: range.to + close.length, insert: '' },
       ],
-      selection: { anchor: range.from - len, head: range.to - len },
+      selection: { anchor: range.from - open.length, head: range.to - open.length },
     })
-  } else if (inner.startsWith(marker) && inner.endsWith(marker) && inner.length > len * 2) {
+  } else if (
+    inner.startsWith(open) &&
+    inner.endsWith(close) &&
+    inner.length >= open.length + close.length
+  ) {
     view.dispatch({
-      changes: { from: range.from, to: range.to, insert: inner.slice(len, -len) },
-      selection: { anchor: range.from, head: range.to - len * 2 },
+      changes: {
+        from: range.from,
+        to: range.to,
+        insert: inner.slice(open.length, inner.length - close.length),
+      },
+      selection: { anchor: range.from, head: range.to - open.length - close.length },
     })
   } else {
     view.dispatch({
-      changes: { from: range.from, to: range.to, insert: `${marker}${inner}${marker}` },
+      changes: { from: range.from, to: range.to, insert: `${open}${inner}${close}` },
       // With nothing selected the caret lands between the markers, ready to type.
       selection: inner
-        ? { anchor: range.from + len, head: range.to + len }
-        : { anchor: range.from + len },
+        ? { anchor: range.from + open.length, head: range.to + open.length }
+        : { anchor: range.from + open.length },
     })
   }
   view.focus()
+}
+
+/** The symmetric case, which is most of markdown. */
+export function wrapSelection(view: EditorView, marker: string) {
+  wrapWith(view, marker, marker)
+}
+
+/**
+ * Takes the styling off the selection.
+ *
+ * Colour is the reason this exists: the opening tag differs per colour, so
+ * "press the same button again" cannot undo it the way bold does.
+ */
+export function clearInline(view: EditorView): boolean {
+  const { state } = view
+  const range = state.selection.main
+  const first = state.doc.lineAt(range.from).number
+  const last = state.doc.lineAt(range.to).number
+  const changes: Array<{ from: number; to: number; insert: string }> = []
+
+  for (let n = first; n <= last; n++) {
+    const line = state.doc.line(n)
+    const tags = [...line.text.matchAll(/<\/?[a-zA-Z][^>]*>/g)]
+    const used = new Set<number>()
+    for (let i = 0; i < tags.length; i++) {
+      if (used.has(i)) continue
+      const spec = INLINE_WRAPPERS.find((w) => w.open.test(tags[i][0]))
+      if (!spec) continue
+      const j = tags.findIndex((t, k) => k > i && !used.has(k) && t[0] === spec.close)
+      if (j === -1) continue
+
+      const openFrom = line.from + (tags[i].index ?? 0)
+      const closeFrom = line.from + (tags[j].index ?? 0)
+      const closeTo = closeFrom + tags[j][0].length
+      // Overlap, not containment: selecting the whole line — opening tag,
+      // text, closing tag — is the most natural way to say "take the
+      // formatting off this", and a containment test rejects exactly that.
+      if (range.from >= closeTo || range.to <= openFrom) continue
+
+      used.add(i)
+      used.add(j)
+      changes.push({ from: openFrom, to: openFrom + tags[i][0].length, insert: '' })
+      changes.push({ from: closeFrom, to: closeTo, insert: '' })
+    }
+  }
+
+  view.focus()
+  if (changes.length === 0) return false
+  view.dispatch({ changes })
+  return true
 }
 
 /** Drops a whole block in on its own line, keeping blank lines around it. */
@@ -233,6 +304,51 @@ export const NOTE_COMMANDS: NoteCommand[] = [
     group: '格式',
     keywords: 'italic 斜體 em',
     run: (v) => wrapSelection(v, '*'),
+  },
+  {
+    id: 'underline',
+    label: '底線',
+    hint: 'markdown 沒有底線，會寫成 <u>',
+    group: '格式',
+    shortcut: 'Mod-u',
+    keywords: 'underline 底線',
+    run: (v) => wrapWith(v, UNDERLINE_OPEN, UNDERLINE_CLOSE),
+  },
+  {
+    id: 'strike',
+    label: '刪除線',
+    hint: '教授說跳過的那一段',
+    group: '格式',
+    shortcut: 'Mod-Shift-x',
+    keywords: 'strike 刪除線 劃掉',
+    run: (v) => wrapSelection(v, '~~'),
+  },
+  ...HIGHLIGHTS.map(
+    (swatch): NoteCommand => ({
+      id: `hl-${swatch.id}`,
+      label: `螢光筆：${swatch.label}`,
+      group: '格式',
+      keywords: `highlight mark 螢光 底色 背景 ${swatch.label}`,
+      run: (v) => wrapWith(v, highlightTag(swatch.hex), '</mark>'),
+    }),
+  ),
+  ...TEXT_COLORS.map(
+    (swatch): NoteCommand => ({
+      id: `color-${swatch.id}`,
+      label: `字色：${swatch.label}`,
+      group: '格式',
+      keywords: `color 字色 顏色 文字 ${swatch.label}`,
+      run: (v) => wrapWith(v, textColorTag(swatch.hex), '</span>'),
+    }),
+  ),
+  {
+    id: 'clear',
+    label: '清除顏色與底線',
+    group: '格式',
+    keywords: 'clear 清除 還原 格式',
+    run: (v) => {
+      clearInline(v)
+    },
   },
   {
     id: 'code',
