@@ -151,7 +151,7 @@ export function CalendarPage() {
         <div className="page-head">
           <div className="grow">
             <h1>行事曆</h1>
-            <p>點一下空白處就能新增課程、分組討論或作業時間。點既有的項目會開啟那一週的筆記。</p>
+            <p>點一下空白處就能排一堂課、分組討論，或一段寫作業的時間。點既有的項目會開啟那一週的筆記。</p>
           </div>
         </div>
 

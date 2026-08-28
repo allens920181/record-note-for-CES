@@ -27,7 +27,7 @@ export interface TimeBlockDraft {
 const KIND_LABEL: Record<Exclude<ItemKind, 'deadline'>, string> = {
   lecture: MEETING_KIND_LABEL.lecture,
   discussion: MEETING_KIND_LABEL.discussion,
-  work: '作業時間',
+  work: '寫作業時段',
 }
 
 /**
@@ -85,7 +85,7 @@ export async function createTimeBlock(draft: TimeBlockDraft): Promise<string> {
       start,
       end,
     })
-    return repeat === 'weekly' ? '已加入每週固定的作業時間。' : '已加入這一天的作業時間。'
+    return repeat === 'weekly' ? '已加入每週固定的寫作業時段。' : '已加入這一天的寫作業時段。'
   }
 
   const meetingKind = kind as MeetingKind
@@ -207,7 +207,7 @@ export function TimeBlockDialog({ draft, onChange, courses, onClose, onSubmit, t
       </div>
 
       {draft.kind === 'work' ? (
-        <div className="notice">作業時間不會產生錄音檔案，只用來算出還剩多少時間可以寫。</div>
+        <div className="notice">這個時段不會產生錄音檔案，只用來算出截止日之前還剩多少小時可以寫。</div>
       ) : draft.repeat === 'weekly' ? (
         <div className="notice">會寫進課表，並依學期週數一次產生整學期的週次。</div>
       ) : (

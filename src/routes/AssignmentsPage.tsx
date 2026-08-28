@@ -74,7 +74,7 @@ export function AssignmentsPage() {
             <h1>作業</h1>
             <p>
               依截止日排序。「時間夠不夠」是拿子任務的預估時數，
-              對照課表裡到截止日為止真正排了多少作業時間算出來的。
+              對照到截止日為止，你真正排了多少寫作業的時段算出來的。
             </p>
           </div>
           <TermPicker termId={termId} terms={terms} onChange={setTermId} id="a-term" />

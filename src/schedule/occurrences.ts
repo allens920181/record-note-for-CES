@@ -82,7 +82,7 @@ export function expandOccurrences({
       color: course.color,
       startMin: minutesOf(block.start),
       endMin: minutesOf(block.end),
-      title: `${course.name} · 作業時間`,
+      title: `${course.name} · 寫作業`,
       detail: block.note,
       workBlockId: block.id,
     }

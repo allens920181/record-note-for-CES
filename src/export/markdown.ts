@@ -71,7 +71,7 @@ export async function exportTermMarkdown(
       }) +
         `\n# ${course.name}\n\n` +
         (slotLines.length ? `## 上課時段\n\n${slotLines.join('\n')}\n\n` : '') +
-        (workLines.length ? `## 作業時間\n\n${workLines.join('\n')}\n\n` : '') +
+        (workLines.length ? `## 寫作業時段\n\n${workLines.join('\n')}\n\n` : '') +
         (req?.rules.trim() ? `## 課堂要求\n\n${req.rules.trim()}\n\n` : '') +
         (course.glossary.length
           ? `## 專有名詞\n\n${course.glossary.map((g) => `- ${g}`).join('\n')}\n`

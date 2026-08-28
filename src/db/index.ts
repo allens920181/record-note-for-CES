@@ -300,7 +300,7 @@ export async function generateSessionsFromTimetable(courseId: string): Promise<G
   const course = await db.courses.get(courseId)
   if (!course) throw new Error('找不到這門課')
   if (course.slots.length === 0) {
-    throw new Error('這門課還沒設定每週固定的上課時段。單次的聚會請用「新增一次…」指定日期。')
+    throw new Error('這門課還沒設定每週固定的上課時段。只上一次的課請用「新增一堂課」指定日期。')
   }
   const term = await db.terms.get(course.termId)
   if (!term) throw new Error('找不到這門課所屬的學期')

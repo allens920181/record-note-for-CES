@@ -192,7 +192,7 @@ export function CoursePage() {
                       }`,
                   )
                   .join('、')}`}
-              {hours.total > 0 && ` · 作業時間共 ${hours.total} 小時`}
+              {hours.total > 0 && ` · 寫作業時段共 ${hours.total} 小時`}
             </p>
           </div>
           <button
@@ -212,24 +212,28 @@ export function CoursePage() {
           </button>
         </div>
 
+        {/* Ordered by how often a term actually brings you here, so the
+            once-a-term setup is not the second thing you read. Each label is
+            one noun phrase: three nouns joined by a dot is a packing list,
+            and tells you nothing about why they are together. */}
         <div className="tabs">
           <button
             className={`tab${tab === 'sessions' ? ' active' : ''}`}
             onClick={() => setTab('sessions')}
           >
-            週次 {sessions ? `(${sessions.length})` : ''}
-          </button>
-          <button className={`tab${tab === 'setup' ? ' active' : ''}`} onClick={() => setTab('setup')}>
-            課表 · 作業時間 · 詞彙表
+            上課週次 {sessions ? `(${sessions.length})` : ''}
           </button>
           <button className={`tab${tab === 'work' ? ' active' : ''}`} onClick={() => setTab('work')}>
-            作業 · 閱讀
+            作業與閱讀
           </button>
           <button
             className={`tab${tab === 'require' ? ' active' : ''}`}
             onClick={() => setTab('require')}
           >
-            課堂要求 · 書目
+            大綱與規定
+          </button>
+          <button className={`tab${tab === 'setup' ? ' active' : ''}`} onClick={() => setTab('setup')}>
+            課程設定
           </button>
         </div>
 
@@ -248,7 +252,7 @@ export function CoursePage() {
                   dialog, which also lets a weekly meeting be added from here
                   instead of only from the other tab. */}
               <button className="btn primary" style={{ flex: '0 0 auto' }} onClick={openAdd}>
-                新增聚會
+                新增一堂課
               </button>
               {/* Only offered when it can work. The reason it cannot is a line
                   on screen with a link, not a `title` — which touch and keyboard
@@ -275,32 +279,22 @@ export function CoursePage() {
               <div className="empty">載入中…</div>
             ) : sessions.length === 0 ? (
               <div className="empty">
-                <p>
-                  還沒有任何週次。每週固定的課先設好課表，就能一次產生整學期；
-                  只開一次的聚會用「新增聚會」挑日期。
+                <p>還沒有任何一堂課。</p>
+                {/* Only the way out that is not already on screen: the toolbar
+                    above carries 新增一堂課, and repeating it here made the
+                    same action appear twice in one view. */}
+                <p className="small muted">
+                  每週都上的課先設好課表，就能一次產生整學期。
                 </p>
-                {/* The button this used to name lives on another tab, which is
-                    the one thing an empty state must never do. */}
-                <div className="row" style={{ gap: '.5rem', justifyContent: 'center' }}>
-                  {slots.length === 0 ? (
-                    <button
-                      className="btn primary"
-                      style={{ flex: '0 0 auto' }}
-                      onClick={() => setTab('setup')}
-                    >
-                      去設定課表
-                    </button>
-                  ) : (
-                    <button className="btn primary" style={{ flex: '0 0 auto' }} onClick={generate}>
-                      依課表產生整學期
-                    </button>
-                  )}
-                  {/* The same words as the toolbar's button: one action must
-                      not answer to two names depending on where it is met. */}
-                  <button className="btn" style={{ flex: '0 0 auto' }} onClick={openAdd}>
-                    新增聚會
+                {slots.length === 0 ? (
+                  <button className="btn primary" onClick={() => setTab('setup')}>
+                    去設定課表
                   </button>
-                </div>
+                ) : (
+                  <button className="btn primary" onClick={generate}>
+                    依課表產生整學期
+                  </button>
+                )}
               </div>
             ) : (
               <div className="stack">
@@ -396,17 +390,24 @@ export function CoursePage() {
           <>
             {/* ── recurring meetings ────────────────────────────── */}
             <section className="card" style={{ marginBottom: '1.25rem' }}>
-              <h2>每週固定的上課時段</h2>
-              <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
-                只放<strong>每週都會發生</strong>的聚會。正課和分組討論各自每週開一個檔案——
-                兩場是分開的錄音，時間軸沒辦法合併，但同一週會共用同一個週次編號。
-                <br />
-                只開一次的分組討論不必寫在這裡，到「週次」用「新增聚會」挑日期就好。
-              </p>
+              <h2>每週課表</h2>
 
+              {/* The explanation lives in the empty state, which is the one
+                  moment it is needed. Above a filled list it made this card
+                  the same weight as every other one on the page. */}
               {slots.length === 0 ? (
                 <div className="empty" style={{ padding: '1.25rem', marginBottom: '.9rem' }}>
-                  還沒有固定時段。
+                  <p style={{ margin: 0 }}>還沒有固定時段。</p>
+                  {/* Left-aligned: a centred paragraph that wraps to three
+                      lines gives the eye a new starting point on each one. */}
+                  <p
+                    className="small muted"
+                    style={{ margin: '.5rem auto 0', maxWidth: '32rem', textAlign: 'left' }}
+                  >
+                    只放<strong>每週都會上</strong>的課。正課和分組討論各自每週開一個檔案——
+                    兩場是分開的錄音，時間軸沒辦法合併，但同一週共用同一個週次編號。
+                    只上一次的課不必寫在這裡，到「上課週次」用「新增一堂課」挑日期就好。
+                  </p>
                 </div>
               ) : (
                 <div className="stack" style={{ marginBottom: '.9rem' }}>
@@ -505,7 +506,7 @@ export function CoursePage() {
                     ])
                   }
                 >
-                  新增時段
+                  新增上課時段
                 </button>
                 <button
                   className="btn primary"
@@ -528,8 +529,9 @@ export function CoursePage() {
             <section className="card" style={{ marginBottom: '1.25rem' }}>
               <h2>專有名詞表</h2>
               <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
-                這串會隨這門課的每次轉錄一起送給模型，讓它知道該怎麼寫這些字。
-                在逐字稿選取文字後也可以直接加進來。目前 {course.glossary.length} 個詞。
+                {course.glossary.length === 0
+                  ? '轉錄時會連同這串一起送給模型，讓它知道該怎麼寫這些字。打完一個詞按 Enter 或頓號就成為一顆。'
+                  : `${course.glossary.length} 個詞，會隨這門課的每次轉錄一起送出。`}
               </p>
               <GlossaryChips
                 terms={course.glossary}
@@ -537,9 +539,6 @@ export function CoursePage() {
                 placeholder="加爾文、巴特、chesed…"
                 emptyText="還沒有這門課的專有名詞。"
               />
-              <p className="small muted" style={{ marginTop: '.5rem' }}>
-                打完一個詞按 Enter 或頓號就成為一顆；點 × 移除。
-              </p>
             </section>
 
             <CorrectionsPanel courseId={courseId} />
@@ -583,12 +582,7 @@ export function CoursePage() {
               {assignments === undefined ? (
                 <div className="empty">載入中…</div>
               ) : dueList.length === 0 ? (
-                <div className="empty">
-                  <p>這門課還沒有作業。</p>
-                  <button className="btn primary" onClick={() => setCreatingAssignment(true)}>
-                    新增作業
-                  </button>
-                </div>
+                <div className="empty">這門課還沒有作業。</div>
               ) : (
                 <div className="stack">
                   {dueList.map((a) => (
@@ -662,7 +656,7 @@ export function CoursePage() {
             }
             setAdding(null)
           }}
-          title="新增聚會"
+          title="新增一堂課"
         />
       )}
     </>

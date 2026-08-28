@@ -56,10 +56,14 @@ export function RequirementsPanel({ courseId }: Props) {
         <h2 style={{ margin: 0 }}>課堂要求</h2>
         {saved && <span className="tag ok">已存檔</span>}
       </div>
-      <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
-        從教學大綱抄下來的評分方式與規定。這裡放的是<strong>寫作業寫到一半會想查</strong>的東西——
-        報告幾頁、引註用什麼格式、遲交怎麼算——不必為了一句話再去開一次 PDF。
-      </p>
+      {/* The placeholder already shows the shape of what goes here, so the
+          reasoning is only worth a paragraph while the box is still empty. */}
+      {requirements.rules.trim() === '' && (
+        <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
+          從教學大綱抄下來的評分方式與規定。放<strong>寫作業寫到一半會想查</strong>的東西——
+          報告幾頁、引註用什麼格式、遲交怎麼算——不必為了一句話再去開一次 PDF。
+        </p>
+      )}
       <textarea
         id={`req-${courseId}`}
         rows={10}
