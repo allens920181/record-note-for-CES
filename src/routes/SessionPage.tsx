@@ -8,7 +8,7 @@ import { readFile, rootStatus } from '../storage/fsRoot'
 import { runTranscription } from '../stt/transcribe'
 import type { RunProgress } from '../stt/transcribe'
 import { formatBytes, formatDuration, formatQuota, formatTime } from '../lib/time'
-import { Breadcrumbs, TopBar } from '../components/Layout'
+import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { NoteEditor } from '../components/NoteEditor'
 import { WeekPlanPanel } from '../components/WeekPlanPanel'
 import type { NoteEditorHandle } from '../components/NoteEditor'
@@ -39,7 +39,8 @@ export function SessionPage() {
   const { sessionId = '' } = useParams()
   const [searchParams] = useSearchParams()
 
-  const session = useLiveQuery(() => db.sessions.get(sessionId), [sessionId])
+  // See CoursePage: undefined means "still reading", null means "not there".
+  const session = useLiveQuery(async () => (await db.sessions.get(sessionId)) ?? null, [sessionId])
   const course = useLiveQuery(
     async () => (session ? db.courses.get(session.courseId) : undefined),
     [session?.courseId],
@@ -311,12 +312,22 @@ export function SessionPage() {
     return () => window.clearTimeout(t)
   }, [glossaryNote])
 
-  if (session === undefined) return <div className="page">載入中…</div>
+  if (session === undefined)
+    return (
+      <PageShell crumbs={[{ label: '學期', to: '/' }, { label: '…' }]}>
+        <div className="empty">載入中…</div>
+      </PageShell>
+    )
   if (session === null)
     return (
-      <div className="page">
-        找不到這個週次。<Link to="/">回到學期列表</Link>
-      </div>
+      <PageShell crumbs={[{ label: '學期', to: '/' }, { label: '找不到' }]}>
+        <div className="empty">
+          <p>找不到這個週次，可能已經被刪掉了。</p>
+          <Link className="btn primary" to="/">
+            回到學期列表
+          </Link>
+        </div>
+      </PageShell>
     )
 
   const hasTranscript = segments.length > 0
@@ -337,6 +348,9 @@ export function SessionPage() {
             fifteen weeks, and every step used to be two clicks via the course
             page. The labels name the destination so a step is never a guess. */}
         <span className="spacer" />
+        {/* While `siblings` is still loading it is undefined, and saying "這是
+            第一個" then would be asserting something not yet known — so the
+            labels only appear once the answer is in. */}
         <Link
           className={`btn ghost sm step${siblings?.prev ? '' : ' is-off'}`}
           to={siblings?.prev ? `/session/${siblings.prev.id}` : '#'}
@@ -344,9 +358,11 @@ export function SessionPage() {
           onClick={(e) => !siblings?.prev && e.preventDefault()}
         >
           ‹{' '}
-          {siblings?.prev
-            ? `第 ${siblings.prev.index} 週 · ${SESSION_KIND_LABEL[siblings.prev.kind ?? 'lecture']}`
-            : '這是第一個'}
+          {siblings === undefined
+            ? ''
+            : siblings.prev
+              ? `第 ${siblings.prev.index} 週 · ${SESSION_KIND_LABEL[siblings.prev.kind ?? 'lecture']}`
+              : '這是第一個'}
         </Link>
         <Link
           className={`btn ghost sm step${siblings?.next ? '' : ' is-off'}`}
@@ -354,9 +370,11 @@ export function SessionPage() {
           aria-disabled={!siblings?.next}
           onClick={(e) => !siblings?.next && e.preventDefault()}
         >
-          {siblings?.next
-            ? `第 ${siblings.next.index} 週 · ${SESSION_KIND_LABEL[siblings.next.kind ?? 'lecture']}`
-            : '這是最後一個'}{' '}
+          {siblings === undefined
+            ? ''
+            : siblings.next
+              ? `第 ${siblings.next.index} 週 · ${SESSION_KIND_LABEL[siblings.next.kind ?? 'lecture']}`
+              : '這是最後一個'}{' '}
           ›
         </Link>
       </TopBar>

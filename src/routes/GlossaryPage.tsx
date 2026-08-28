@@ -12,7 +12,7 @@ import {
   renameEverywhere,
 } from '../schedule/glossary'
 import type { GlossaryEntry, GlossaryView } from '../schedule/glossary'
-import { TopBar } from '../components/Layout'
+import { Breadcrumbs, TopBar } from '../components/Layout'
 import { useTermChoice } from '../components/TermPicker'
 
 export function GlossaryPage() {
@@ -70,8 +70,10 @@ export function GlossaryPage() {
 
   return (
     <>
-      <TopBar />
-      <div className="page">
+      <TopBar>
+        <Breadcrumbs items={[{ label: '詞彙表總表' }]} />
+      </TopBar>
+      <main className="page">
         <h1>詞彙表總表</h1>
         <p className="small muted" style={{ margin: '.35rem 0 1.25rem', maxWidth: '46rem' }}>
           所有課程的專有名詞都在這裡。轉錄時送給模型的是
@@ -266,7 +268,7 @@ export function GlossaryPage() {
             </p>
           )}
         </section>
-      </div>
+      </main>
     </>
   )
 }

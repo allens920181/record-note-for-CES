@@ -14,7 +14,7 @@ import {
 } from '../storage/fsRoot'
 import type { RootStatus } from '../storage/fsRoot'
 import { testConnection } from '../stt/groq'
-import { Breadcrumbs, TopBar } from '../components/Layout'
+import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { QuotaPanel } from '../components/QuotaPanel'
 import { ExportPanel } from '../components/ExportPanel'
 
@@ -61,7 +61,12 @@ export function SettingsPage() {
     }
   }
 
-  if (!settings) return <div className="page">載入中…</div>
+  if (!settings)
+    return (
+      <PageShell crumbs={[{ label: '設定' }]}>
+        <div className="empty">載入中…</div>
+      </PageShell>
+    )
 
   return (
     <>

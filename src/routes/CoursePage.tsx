@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   WEEKDAY_LABELS,
@@ -16,7 +16,7 @@ import {
 import type { ClassSlot } from '../db'
 import { MEETING_KINDS, MEETING_KIND_LABEL, SESSION_KIND_LABEL } from '../db/schema'
 import type { MeetingKind } from '../db/schema'
-import { Breadcrumbs, TopBar } from '../components/Layout'
+import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { AttachmentList } from '../components/AttachmentList'
 import { WorkBlockEditor } from '../components/WorkBlockEditor'
 import { ReadingList } from '../components/ReadingList'
@@ -30,18 +30,36 @@ import { TimeField } from '../components/TimeField'
 import { useConfirm } from '../components/ConfirmProvider'
 
 type Tab = 'sessions' | 'setup' | 'work' | 'require'
+const TABS: string[] = ['sessions', 'setup', 'work', 'require']
 
 
 export function CoursePage() {
   const ask = useConfirm()
   const { courseId = '' } = useParams()
-  const [tab, setTab] = useState<Tab>('sessions')
+  // In the URL, not in state: a link can point at a specific tab, the back
+  // button returns to the one you were on, and the calendar can send you
+  // straight to 作業時間 instead of dropping you on 週次 with no sign of it.
+  const [params, setParams] = useSearchParams()
+  const tab = (TABS.includes(params.get('tab') as Tab) ? params.get('tab') : 'sessions') as Tab
+  const setTab = (next: Tab) =>
+    setParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        if (next === 'sessions') p.delete('tab')
+        else p.set('tab', next)
+        return p
+      },
+      { replace: true },
+    )
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
   const [adding, setAdding] = useState<MeetingKind | null>(null)
   const [addDate, setAddDate] = useState(todayISO())
   const [courseDraft, setCourseDraft] = useState<CourseDraft | null>(null)
 
-  const course = useLiveQuery(() => db.courses.get(courseId), [courseId])
+  // `?? null` so a missing row is distinguishable from a pending read: Dexie
+  // returns undefined for both, which left the "找不到" branch unreachable and
+  // a deleted or mistyped id showing 載入中… for ever.
+  const course = useLiveQuery(async () => (await db.courses.get(courseId)) ?? null, [courseId])
   const term = useLiveQuery(
     async () => (course ? db.terms.get(course.termId) : undefined),
     [course?.termId],
@@ -70,12 +88,22 @@ export function CoursePage() {
     }
   }, [courseId])
 
-  if (course === undefined) return <div className="page">載入中…</div>
+  if (course === undefined)
+    return (
+      <PageShell crumbs={[{ label: '學期', to: '/' }, { label: '…' }]}>
+        <div className="empty">載入中…</div>
+      </PageShell>
+    )
   if (course === null)
     return (
-      <div className="page">
-        找不到這門課。<Link to="/">回到學期列表</Link>
-      </div>
+      <PageShell crumbs={[{ label: '學期', to: '/' }, { label: '找不到' }]}>
+        <div className="empty">
+          <p>找不到這門課，可能已經被刪掉了。</p>
+          <Link className="btn primary" to="/">
+            回到學期列表
+          </Link>
+        </div>
+      </PageShell>
     )
 
   const slots = course.slots

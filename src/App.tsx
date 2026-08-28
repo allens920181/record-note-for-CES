@@ -13,6 +13,7 @@ import { SettingsPage } from './routes/SettingsPage'
 import { migrateLegacyWorkSlots } from './db'
 import { failInterruptedJobs } from './stt/transcribe'
 import { ConfirmProvider } from './components/ConfirmProvider'
+import { NotFound } from './routes/NotFound'
 
 export function App() {
   useEffect(() => {
@@ -37,7 +38,7 @@ export function App() {
           <Route path="/glossary" element={<GlossaryPage />} />
           <Route path="/session/:sessionId" element={<SessionPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Dashboard />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
       </HashRouter>

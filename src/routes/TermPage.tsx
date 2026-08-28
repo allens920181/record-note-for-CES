@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { createCourse, db, deleteCourseCascade, sessionsInTerm, updateCourse, updateTerm } from '../db'
 import { COURSE_COLORS } from '../db/schema'
-import { Breadcrumbs, TopBar } from '../components/Layout'
+import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { SetupBanner } from '../components/SetupBanner'
 import { CourseForm, EMPTY_COURSE } from '../components/CourseForm'
@@ -13,7 +13,8 @@ import { useConfirm } from '../components/ConfirmProvider'
 export function TermPage() {
   const ask = useConfirm()
   const { termId = '' } = useParams()
-  const term = useLiveQuery(() => db.terms.get(termId), [termId])
+  // See CoursePage: undefined means "still reading", null means "not there".
+  const term = useLiveQuery(async () => (await db.terms.get(termId)) ?? null, [termId])
   const courses = useLiveQuery(
     () => db.courses.where('termId').equals(termId).sortBy('createdAt'),
     [termId],
@@ -71,8 +72,23 @@ export function TermPage() {
     setNotice(renumbered > 0 ? `已更新學期，並重新編號 ${renumbered} 個週次。` : '已更新學期。')
   }
 
-  if (term === undefined) return <div className="page">載入中…</div>
-  if (term === null) return <div className="page">找不到這個學期。<Link to="/">回到學期列表</Link></div>
+  if (term === undefined)
+    return (
+      <PageShell crumbs={[{ label: '學期', to: '/' }, { label: '…' }]}>
+        <div className="empty">載入中…</div>
+      </PageShell>
+    )
+  if (term === null)
+    return (
+      <PageShell crumbs={[{ label: '學期', to: '/' }, { label: '找不到' }]}>
+        <div className="empty">
+          <p>找不到這個學期，可能已經被刪掉了。</p>
+          <Link className="btn primary" to="/">
+            回到學期列表
+          </Link>
+        </div>
+      </PageShell>
+    )
 
   return (
     <>

@@ -55,6 +55,30 @@ export function TopBar({ children }: { children?: ReactNode }) {
   )
 }
 
+/**
+ * The frame that stays put while a page loads or is missing.
+ *
+ * Returning a bare `<div class="page">載入中…</div>` from a route made the whole
+ * top bar vanish and reappear on every navigation, so the app blinked twice for
+ * each click. Only the content area should change.
+ */
+export function PageShell({
+  crumbs,
+  children,
+}: {
+  crumbs: Crumb[]
+  children: ReactNode
+}) {
+  return (
+    <>
+      <TopBar>
+        <Breadcrumbs items={crumbs} />
+      </TopBar>
+      <main className="page">{children}</main>
+    </>
+  )
+}
+
 export function Layout() {
   return (
     <div className="app">
