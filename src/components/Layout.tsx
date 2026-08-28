@@ -1,5 +1,10 @@
+import { createContext, useContext } from 'react'
 import { Link, Outlet } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { Sidebar, useSidebarOpen } from './Sidebar'
+
+/** Lets the top bar's toggle reach the sidebar without threading props. */
+const SidebarToggle = createContext<(() => void) | null>(null)
 
 export interface Crumb {
   label: string
@@ -23,34 +28,27 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
   )
 }
 
+/**
+ * The bar above the page: where you are, and a handle on the sidebar.
+ *
+ * The five navigation links used to live here, beside the breadcrumbs, and
+ * wrapped onto a second line as soon as the trail got long. They are in the
+ * sidebar now — one place for navigation, and room here for the trail.
+ */
 export function TopBar({ children }: { children?: ReactNode }) {
+  const toggle = useContext(SidebarToggle)
   return (
     <header className="topbar">
-      <Link to="/" className="brand">
-        神學院錄音筆記
-      </Link>
+      <button
+        className="side-toggle"
+        aria-label="開關側邊欄"
+        title="開關側邊欄"
+        onClick={() => toggle?.()}
+      >
+        ☰
+      </button>
       {children}
       <span className="spacer" />
-      {/* Grouped so the links wrap onto a second line together rather than one
-          at a time — five of them no longer fit beside a breadcrumb trail in a
-          narrow window. */}
-      <nav className="topnav" aria-label="主導覽">
-        <Link to="/search" className="btn ghost sm">
-          搜尋
-        </Link>
-        <Link to="/glossary" className="btn ghost sm">
-          詞彙表
-        </Link>
-        <Link to="/calendar" className="btn ghost sm">
-          行事曆
-        </Link>
-        <Link to="/assignments" className="btn ghost sm">
-          作業
-        </Link>
-        <Link to="/settings" className="btn ghost sm">
-          設定
-        </Link>
-      </nav>
     </header>
   )
 }
@@ -80,9 +78,23 @@ export function PageShell({
 }
 
 export function Layout() {
+  const [open, setOpen] = useSidebarOpen()
   return (
-    <div className="app">
-      <Outlet />
-    </div>
+    <SidebarToggle.Provider value={() => setOpen(!open)}>
+      <div className={`app${open ? ' side-open' : ''}`}>
+        <Sidebar
+          open={open}
+          onClose={() => {
+            // Only the narrow layout closes on navigation; on a wide screen the
+            // sidebar is part of the furniture and closing it would be a
+            // surprise every time you clicked a week.
+            if (!window.matchMedia('(min-width: 60rem)').matches) setOpen(false)
+          }}
+        />
+        <div className="app-main">
+          <Outlet />
+        </div>
+      </div>
+    </SidebarToggle.Provider>
   )
 }
