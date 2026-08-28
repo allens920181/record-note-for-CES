@@ -26,6 +26,7 @@ import { Modal } from '../components/Modal'
 import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
 import { TimeField } from '../components/TimeField'
+import { GlossaryChips } from '../components/GlossaryChips'
 import { TimeBlockDialog, createTimeBlock, makeDraft } from '../components/TimeBlockDialog'
 import type { TimeBlockDraft } from '../components/TimeBlockDialog'
 import { useConfirm } from '../components/ConfirmProvider'
@@ -526,25 +527,14 @@ export function CoursePage() {
                 這串會隨這門課的每次轉錄一起送給模型，讓它知道該怎麼寫這些字。
                 在逐字稿選取文字後也可以直接加進來。目前 {course.glossary.length} 個詞。
               </p>
-              <textarea
-                rows={4}
-                placeholder="加爾文、巴特、士來馬赫、預定論、釋經學、稱義、成聖、logos、chesed"
-                // Uncontrolled so typing is never interrupted, but keyed on the
-                // saved list so a term added from the corrections panel below
-                // actually appears here instead of silently disagreeing with it.
-                key={course.glossary.join('、')}
-                defaultValue={course.glossary.join('、')}
-                onBlur={(e) =>
-                  db.courses.update(courseId, {
-                    glossary: e.target.value
-                      .split(/[、,\n]/)
-                      .map((t) => t.trim())
-                      .filter(Boolean),
-                  })
-                }
+              <GlossaryChips
+                terms={course.glossary}
+                onChange={(glossary) => void db.courses.update(courseId, { glossary })}
+                placeholder="加爾文、巴特、chesed…"
+                emptyText="還沒有這門課的專有名詞。"
               />
               <p className="small muted" style={{ marginTop: '.5rem' }}>
-                用頓號或換行分隔。離開輸入框就會存檔。
+                打完一個詞按 Enter 或頓號就成為一顆；點 × 移除。
               </p>
             </section>
 

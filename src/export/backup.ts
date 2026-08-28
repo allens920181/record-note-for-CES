@@ -1,4 +1,4 @@
-import { db } from '../db'
+import { db, getSettings, saveSettings } from '../db'
 
 const FORMAT = 'record-note-for-ces/backup'
 const VERSION = 1
@@ -10,7 +10,8 @@ const VERSION = 1
  *
  * `settings` and `usage` are left out too: an API key and a quota tally belong
  * to one machine, and restoring them elsewhere would show phantom usage against
- * a key that never sent those requests.
+ * a key that never sent those requests. The one exception is carried
+ * separately below — see `globalGlossary`.
  */
 const TABLES = [
   'terms',
@@ -32,6 +33,15 @@ export interface BackupFile {
   version: number
   exportedAt: string
   tables: Record<string, unknown[]>
+  /**
+   * The cross-course term list.
+   *
+   * It lives in `settings` next to the API key, so excluding that whole row
+   * quietly excluded this — a hand-built list of names and transliterations,
+   * exactly the kind of work a backup exists to protect. Carried as its own
+   * field so the key and the quota tally stay behind.
+   */
+  globalGlossary?: string[]
 }
 
 export async function buildBackup(): Promise<BackupFile> {
@@ -44,6 +54,7 @@ export async function buildBackup(): Promise<BackupFile> {
     version: VERSION,
     exportedAt: new Date().toISOString(),
     tables,
+    globalGlossary: (await getSettings()).globalGlossary,
   }
 }
 
@@ -58,6 +69,8 @@ export function backupFileName(): string {
 
 export interface RestoreResult {
   restored: Record<string, number>
+  /** How many global terms came back, so the count can be reported honestly. */
+  globalGlossary: number
 }
 
 /**
@@ -86,7 +99,17 @@ export async function restoreBackup(file: File): Promise<RestoreResult> {
     if (rows.length > 0) await db.table(name).bulkAdd(rows)
     restored[name] = rows.length
   }
-  return { restored }
+
+  // Only this one field: the key and the usage tally stay as they are on this
+  // machine. Backups written before this existed simply have nothing to say.
+  let globalGlossary = 0
+  if (Array.isArray(parsed.globalGlossary)) {
+    const terms = parsed.globalGlossary.filter((t): t is string => typeof t === 'string')
+    await saveSettings({ globalGlossary: terms })
+    globalGlossary = terms.length
+  }
+
+  return { restored, globalGlossary }
 }
 
 /** Hands the file to the browser's downloader. */

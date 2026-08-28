@@ -500,6 +500,32 @@ table.gloss .tag + .tag { margin-left: .3rem; }
   border: none; padding: 0 .15rem; cursor: pointer; border-radius: 3px;
 }
 .use .x:hover { background: var(--danger-wash); color: var(--danger); }
+/* Glossary chips. Shares the .use chip's shape so a term looks the same
+   wherever it is listed. */
+.chips {
+  display: flex; flex-wrap: wrap; gap: .35rem; align-items: center;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: .5rem .55rem; min-height: 2.6rem;
+}
+.chips:focus-within { border-color: var(--accent); }
+.chip {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .82rem; color: var(--ink-soft);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: .12rem .3rem .12rem .5rem;
+}
+.chip .x {
+  font: inherit; line-height: 1; color: var(--muted); background: none;
+  border: none; padding: 0 .15rem; cursor: pointer; border-radius: 3px;
+}
+.chip .x:hover { background: var(--danger-wash); color: var(--danger); }
+/* Grows to fill the row it lands on, so the caret is never in a 2rem box. */
+.chip-input {
+  flex: 1 1 10rem; min-width: 8rem; border: none; background: none;
+  padding: .1rem .15rem; font: inherit; font-size: .82rem;
+}
+.chip-input:focus { outline: none; box-shadow: none; }
+
 
 /* Fixed width, not auto: a select sized to its longest course name makes the
    action column a different width on every row. */

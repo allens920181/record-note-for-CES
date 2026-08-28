@@ -110,7 +110,7 @@ export function ExportPanel() {
                       <ul>
                         <li>學期、課程、週次、課表與作業時間</li>
                         <li>逐字稿、筆記、本週進度</li>
-                        <li>作業、閱讀材料、專有名詞表</li>
+                        <li>作業、閱讀材料、專有名詞表（含全域詞彙）</li>
                       </ul>
                       音檔與 PDF 不在備份裡，會留在你選的資料夾。
                     </>
@@ -118,9 +118,9 @@ export function ExportPanel() {
                 })
                 if (!go) return
                 await guard('restore', async () => {
-                  const { restored } = await restoreBackup(file)
+                  const { restored, globalGlossary } = await restoreBackup(file)
                   const rows = Object.values(restored).reduce((s, n) => s + n, 0)
-                  return `已還原 ${rows} 筆資料。`
+                  return `已還原 ${rows} 筆資料${globalGlossary > 0 ? `，以及 ${globalGlossary} 個全域詞彙` : ''}。`
                 })
               })()
             }}
