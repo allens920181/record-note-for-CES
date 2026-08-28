@@ -1,0 +1,20 @@
+# Netlify 部署設定。連上 GitHub repo 之後 Netlify 會讀這個檔，
+# 建置指令與發佈目錄都不必在網頁上手動填。
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Vite 7 要 node ^20.19 || >=22.12。釘住版本，才不會哪天 Netlify
+  # 換掉預設值，建置就在沒有人改過任何一行程式碼的情況下壞掉。
+  NODE_VERSION = "22"
+
+# 刻意不設 SPA fallback（/* → /index.html）。
+# 這個 app 用 HashRouter，所有路由都在 /#/... 底下，站台本身只需要
+# 服務根目錄那一個頁面。而且 vite 的 base 是相對路徑：真的把
+# /foo/bar 也回 index.html 的話，資產會被解析到 /foo/assets/...
+# 而全部載不到——fallback 在這裡不是保險，是故障來源。
+
+# ffmpeg.wasm 是單執行緒版本，不需要 COOP/COEP；
+# 沒有跨來源隔離的需求，就不要加會讓其他東西一起壞掉的標頭。

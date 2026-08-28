@@ -110,10 +110,34 @@
 
 ## 開始使用
 
+這是網頁 app，**沒有安裝檔**。把 `dist` 下載下來直接點 `index.html` 只會得到白畫面——
+瀏覽器不允許 `file://` 載入 ES 模組。它需要一個 server 端著，不管是你電腦上的還是雲端的。
+
+### 方式一：部署到 Netlify（設定一次，之後開網址就好）
+
+repo 裡的 `netlify.toml` 已經寫好建置指令與發佈目錄，Netlify 會自己讀，不必手動填。
+
+1. 到 [netlify.com](https://app.netlify.com) 用 GitHub 帳號登入
+2. **Add new site → Import an existing project → GitHub**，選 `record-note-for-CES`
+3. 建置設定會自動帶出（`npm run build` / `dist` / Node 22），按 **Deploy**
+4. 兩三分鐘後會拿到一個 `xxx.netlify.app` 的網址，可以在 Site settings 改成好記的名字
+
+之後每次推上 GitHub，Netlify 會自動重新建置。網址是 HTTPS，
+[App 內錄音需要的就是這個](#需要知道的事)。
+
+### 方式二：在自己電腦跑
+
 ```bash
 npm install     # 會自動把 ffmpeg core 複製到 public/
-npm run dev
+npm run dev     # 然後開 http://localhost:5173
 ```
+
+需要 Node.js 20.19+ 或 22.12+（Vite 7 的要求）。每次使用都要讓這個指令開著。
+
+> **兩種方式的資料是分開的。**
+> 你的課程、逐字稿與筆記存在**那個瀏覽器**的 IndexedDB 裡，音檔存在你指定的本機資料夾。
+> `localhost:5173` 和 `xxx.netlify.app` 是兩個不同的來源，各自有各自的資料庫。
+> 挑一個用到底；真要搬家就用「設定 → 匯出與備份」的備份檔。
 
 首次開啟請到「設定」完成兩件事：
 
@@ -142,7 +166,8 @@ Vite + React + TypeScript · Dexie（IndexedDB）· File System Access API ·
 ffmpeg.wasm（單執行緒，不需 COOP/COEP）· CodeMirror 6 · HashRouter ·
 pdf.js · 匯出用 File System Access API 寫進你指定的資料夾
 
-靜態站，可直接部署到 GitHub Pages。
+純靜態站，沒有後端。部署到 Netlify、Cloudflare Pages、GitHub Pages 都可以——
+`base: './'` 加上 HashRouter，代表它在根目錄或子路徑底下都能跑，也不需要任何 server 端的重寫規則。
 
 ## 腳本
 
