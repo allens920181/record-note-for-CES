@@ -1,5 +1,6 @@
 import { db } from '../db'
 import { SESSION_KIND_LABEL } from '../db/schema'
+import type { TranscriptSegment } from '../db/schema'
 import { ASSIGNMENT_STATUS_LABEL, READING_STATUS_LABEL } from '../db/schema'
 import { safeName, writeInto } from '../storage/fsRoot'
 import { formatTime } from '../lib/time'
@@ -16,6 +17,21 @@ function frontMatter(fields: Record<string, string | number | undefined>): strin
     .filter(([, v]) => v !== undefined && v !== '')
     .map(([k, v]) => `${k}: ${typeof v === 'string' && /[:#\-]/.test(v) ? JSON.stringify(v) : v}`)
   return `---\n${lines.join('\n')}\n---\n`
+}
+
+/**
+ * One part's lines, each keeping the `[hh:mm:ss]` you search for.
+ *
+ * Where a turn was marked, the name leads the line it starts — the same shape
+ * the workspace shows, and the one an interview transcript has always had.
+ */
+function transcriptBody(segments: TranscriptSegment[]): string {
+  return `${segments
+    .map(
+      (seg) =>
+        `\`[${formatTime(seg.start)}]\` ${seg.speaker ? `**${seg.speaker}：** ` : ''}${seg.text}`,
+    )
+    .join('\n\n')}\n`
 }
 
 /**
@@ -127,11 +143,20 @@ export async function exportTermMarkdown(
     )
     for (const session of sessions) {
       const kind = SESSION_KIND_LABEL[session.kind ?? 'lecture']
-      const [transcript, note, plan] = await Promise.all([
-        db.transcripts.where('sessionId').equals(session.id).last(),
+      // Every recording of the week, in the order they were made, each with
+      // its own transcript: a week is not always one file, and the parts keep
+      // their own clocks rather than being laid end to end.
+      const [recordings, allTranscripts, note, plan] = await Promise.all([
+        db.recordings.where('sessionId').equals(session.id).sortBy('createdAt'),
+        db.transcripts.where('sessionId').equals(session.id).toArray(),
         db.notes.get(session.id),
         db.weekPlans.get(session.id),
       ])
+      const parts = recordings.length
+        ? recordings.map((r) => allTranscripts.find((t) => t.recordingId === r.id) ?? null)
+        : // A transcript whose audio was deleted still belongs in the export.
+          [allTranscripts[allTranscripts.length - 1] ?? null]
+      const written = parts.filter((t): t is NonNullable<typeof t> => t !== null)
       const planLines = (plan?.items ?? []).map(
         (i) => `- [${i.done ? 'x' : ' '}] ${i.title}${i.hours ? ` （${i.hours}h）` : ''}`,
       )
@@ -150,10 +175,14 @@ export async function exportTermMarkdown(
         `\n# ${name}${session.topic ? ` · ${session.topic}` : ''}\n\n` +
         (planLines.length ? `## 本週進度\n\n${planLines.join('\n')}\n\n` : '') +
         (note?.markdown.trim() ? `## 我的筆記\n\n${note.markdown.trim()}\n\n` : '') +
-        (transcript
-          ? `## 逐字稿\n\n${transcript.segments
-              .map((seg) => `\`[${formatTime(seg.start)}]\` ${seg.text}`)
-              .join('\n\n')}\n`
+        (written.length > 0
+          ? `## 逐字稿\n\n${parts
+              .map((t, i) =>
+                t
+                  ? (parts.length > 1 ? `### 第 ${i + 1} 段錄音\n\n` : '') + transcriptBody(t.segments)
+                  : `### 第 ${i + 1} 段錄音\n\n（還沒轉錄）\n`,
+              )
+              .join('\n')}`
           : '')
 
       await writeInto(root, `${courseDir}/${safeName(name)}.md`, body)

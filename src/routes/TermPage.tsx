@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { createCourse, db, deleteCourseCascade, sessionsInTerm, updateCourse, updateTerm } from '../db'
 import { COURSE_COLORS } from '../db/schema'
+import { weeksBetween } from '../lib/dates'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { SetupBanner } from '../components/SetupBanner'
@@ -34,7 +35,6 @@ export function TermPage() {
     name: string
     startDate: string
     endDate: string
-    weeks: number
   } | null>(null)
   const [affected, setAffected] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
@@ -64,12 +64,11 @@ export function TermPage() {
   }
 
   async function submitTerm() {
-    if (!termDraft || !termDraft.name.trim()) return
+    if (!termDraft || !termDraft.name.trim() || termDraft.endDate < termDraft.startDate) return
     const { renumbered } = await updateTerm(termId, {
       name: termDraft.name.trim(),
       startDate: termDraft.startDate,
       endDate: termDraft.endDate,
-      weeks: termDraft.weeks,
     })
     setTermDraft(null)
     setNotice(renumbered > 0 ? `已更新學期，並重新編號 ${renumbered} 個週次。` : '已更新學期。')
@@ -106,7 +105,7 @@ export function TermPage() {
           <div className="grow">
             <h1>{term.name}</h1>
             <p>
-              {term.startDate} 起 · {term.weeks} 週
+              {term.startDate} 起 · {weeksBetween(term.startDate, term.endDate)} 週
             </p>
           </div>
           <button
@@ -118,7 +117,6 @@ export function TermPage() {
                 name: term.name,
                 startDate: term.startDate,
                 endDate: term.endDate,
-                weeks: term.weeks,
               })
             }}
           >
@@ -230,7 +228,7 @@ export function TermPage() {
           onClose={() => setTermDraft(null)}
           onSubmit={submitTerm}
           submitLabel="儲存"
-          submitDisabled={!termDraft.name.trim()}
+          submitDisabled={!termDraft.name.trim() || termDraft.endDate < termDraft.startDate}
         >
           <div className="field">
             <label htmlFor="t-name">學期名稱</label>
@@ -261,25 +259,18 @@ export function TermPage() {
                 onChange={(e) => setTermDraft({ ...termDraft, endDate: e.target.value })}
               />
             </div>
-            <div className="field">
-              <label htmlFor="t-weeks">週數</label>
-              <input
-                id="t-weeks"
-                type="number"
-                min={1}
-                max={30}
-                value={termDraft.weeks}
-                onChange={(e) =>
-                  setTermDraft({ ...termDraft, weeks: Math.max(1, Number(e.target.value) || 1) })
-                }
-              />
-              <div className="hint">密集課 6 週、暑期班 8 週都填得進來。</div>
-            </div>
+          </div>
+          {/* 週數是從兩個日期算出來的，不是第三個可以和它們打架的欄位。
+              密集課 6 週、暑期班 8 週，都只是不同的結束日。 */}
+          <div className="hint" data-testid="term-weeks">
+            {termDraft.endDate < termDraft.startDate
+              ? '結束日期不能早於開始日期。'
+              : `共 ${weeksBetween(termDraft.startDate, termDraft.endDate)} 週。`}
           </div>
           {affected > 0 &&
-            (termDraft.startDate !== term.startDate || termDraft.weeks !== term.weeks) && (
+            (termDraft.startDate !== term.startDate || termDraft.endDate !== term.endDate) && (
               <div className="notice warn">
-                改動開始日或週數後，這個學期已建立的 {affected} 個週次會依新的開始日重新編號。
+                改動日期後，這個學期已建立的 {affected} 個週次會依新的開始日重新編號。
                 週次本身不會被刪除。
               </div>
             )}

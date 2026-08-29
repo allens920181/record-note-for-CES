@@ -1,4 +1,5 @@
 import { db, getSettings, saveSettings } from '../db'
+import { endOfWeeks } from '../lib/dates'
 
 const FORMAT = 'record-note-for-ces/backup'
 const VERSION = 1
@@ -76,6 +77,26 @@ export interface RestoreResult {
  * Replaces the database with a backup's contents. Settings and the storage
  * handle are left alone: they describe this machine, not the notes.
  */
+/**
+ * A term from a backup written when the week count was typed in by hand.
+ *
+ * The schema upgrade does the same thing to the terms already in the database:
+ * honour what the count promised — pushing the end date out if it falls short —
+ * and then drop the field, because two dates and a count are three things that
+ * can disagree.
+ */
+function asTerm(row: unknown): unknown {
+  if (!row || typeof row !== 'object') return row
+  const term = { ...(row as Record<string, unknown>) }
+  const weeks = Number(term.weeks)
+  if (typeof term.startDate === 'string' && Number.isFinite(weeks) && weeks > 0) {
+    const promised = endOfWeeks(term.startDate, weeks)
+    if (typeof term.endDate !== 'string' || term.endDate < promised) term.endDate = promised
+  }
+  delete term.weeks
+  return term
+}
+
 export async function restoreBackup(file: File): Promise<RestoreResult> {
   let parsed: BackupFile
   try {
@@ -98,7 +119,7 @@ export async function restoreBackup(file: File): Promise<RestoreResult> {
     const rows = parsed.tables?.[name]
     if (!Array.isArray(rows)) continue
     await db.table(name).clear()
-    if (rows.length > 0) await db.table(name).bulkAdd(rows)
+    if (rows.length > 0) await db.table(name).bulkAdd(name === 'terms' ? rows.map(asTerm) : rows)
     restored[name] = rows.length
   }
 

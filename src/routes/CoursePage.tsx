@@ -78,6 +78,24 @@ function Inserter({ onPick, label }: { onPick: (kind: SessionKind) => void; labe
 }
 
 
+/**
+ * Whether this week's audio has been turned into text.
+ *
+ * A week can hold more than one recording — a break in the middle, a phone that
+ * died — so the honest states are three, not two: nothing recorded, all of it
+ * transcribed, and some of it still waiting.
+ */
+function TranscriptTag({ parts, done }: { parts: number; done: number }) {
+  if (parts === 0) return <span className="tag">未轉錄</span>
+  if (done >= parts)
+    return <span className="tag ok">已轉錄{parts > 1 ? ` · ${parts} 段` : ''}</span>
+  return (
+    <span className="tag warn">
+      {done} / {parts} 段已轉錄
+    </span>
+  )
+}
+
 export function CoursePage() {
   const ask = useConfirm()
   const { courseId = '' } = useParams()
@@ -124,14 +142,23 @@ export function CoursePage() {
   )
   const state = useLiveQuery(async () => {
     const ids = (await db.sessions.where('courseId').equals(courseId).primaryKeys()) as string[]
-    const [scribed, notes, plans] = await Promise.all([
+    const [scribed, recordings, notes, plans] = await Promise.all([
       // Keys, not records: a transcript holds every segment of a three-hour
       // lecture, and this only needs to know whether one exists.
       db.transcripts.where('sessionId').anyOf(ids).keys(),
+      db.recordings.where('sessionId').anyOf(ids).toArray(),
       db.notes.where('sessionId').anyOf(ids).toArray(),
       db.weekPlans.where('courseId').equals(courseId).toArray(),
     ])
+    // A week can hold several recordings, and "已轉錄" should mean all of them:
+    // one part still waiting is exactly what you came to this page to notice.
+    const partsOf = new Map<string, number>()
+    for (const r of recordings) partsOf.set(r.sessionId, (partsOf.get(r.sessionId) ?? 0) + 1)
+    const doneOf = new Map<string, number>()
+    for (const sid of scribed as string[]) doneOf.set(sid, (doneOf.get(sid) ?? 0) + 1)
     return {
+      parts: partsOf,
+      transcribedParts: doneOf,
       transcribed: new Set(scribed as string[]),
       noted: new Set(notes.filter((n) => n.markdown.trim()).map((n) => n.sessionId)),
       plans: new Map(plans.map((p) => [p.sessionId, p.items])),
@@ -345,11 +372,10 @@ export function CoursePage() {
                           {s.canceled ? (
                             <span className="tag warn">停課</span>
                           ) : meeting ? (
-                            state?.transcribed.has(s.id) ? (
-                              <span className="tag ok">已轉錄</span>
-                            ) : (
-                              <span className="tag">未轉錄</span>
-                            )
+                            <TranscriptTag
+                              parts={state?.parts.get(s.id) ?? 0}
+                              done={state?.transcribedParts.get(s.id) ?? 0}
+                            />
                           ) : null}
                           {state?.noted.has(s.id) && <span className="tag ok">有筆記</span>}
                           {!s.canceled && meeting && (

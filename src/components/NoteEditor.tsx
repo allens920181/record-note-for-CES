@@ -5,7 +5,7 @@ import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { TIMESTAMP_TOKEN, formatTime, parseTime } from '../lib/time'
+import { TIMESTAMP_TOKEN, parseStamp, stampToken } from '../lib/time'
 import { richMarkdown } from '../editor/richMarkdown'
 import { slashMenu } from '../editor/slashMenu'
 import { NOTE_COMMANDS, toggleLinePrefix, wrapSelection, wrapWith } from '../editor/commands'
@@ -21,8 +21,12 @@ import { MARK_LINE, NOTE_MARKS } from '../editor/marks'
 import type { NoteMark } from '../editor/marks'
 
 export interface NoteEditorHandle {
-  /** Drops a [[hh:mm:ss]] token at the cursor and refocuses the editor. */
-  insertTimestamp: (seconds: number) => void
+  /**
+   * Drops a timestamp token at the cursor and refocuses the editor. `part`
+   * names which recording it belongs to, and is left out of the token for the
+   * first one — see `stampToken`.
+   */
+  insertTimestamp: (seconds: number, part?: number) => void
   /** Runs one of the shared note commands by id. */
   run: (id: string) => void
   /** Puts the cursor on a 1-based line and scrolls it into view. */
@@ -41,7 +45,7 @@ interface Props {
    */
   onCommit?: (value: string) => void
   /** Called when a timestamp token in the note is clicked. */
-  onSeek?: (seconds: number) => void
+  onSeek?: (seconds: number, part: number) => void
   /** Invoked by the Alt+T binding so the caller can supply the current time. */
   onStampRequested?: () => void
   /**
@@ -206,10 +210,10 @@ export function NoteEditor({
   }
 
   useImperativeHandle(ref, () => ({
-    insertTimestamp(seconds: number) {
+    insertTimestamp(seconds: number, part?: number) {
       const v = view.current
       if (!v) return
-      const token = `[[${formatTime(seconds)}]] `
+      const token = `${stampToken(seconds, part)} `
       const { from, to } = v.state.selection.main
       v.dispatch({
         changes: { from, to, insert: token },
@@ -330,10 +334,10 @@ export function NoteEditor({
               if (!cbs.current.onSeek) return false
               const el = event.target as HTMLElement | null
               if (!el?.classList.contains('cm-ts')) return false
-              const seconds = parseTime(el.textContent?.replace(/[[\]]/g, '') ?? '')
-              if (seconds === null) return false
+              const stamp = parseStamp(el.textContent ?? '')
+              if (!stamp) return false
               event.preventDefault()
-              cbs.current.onSeek?.(seconds)
+              cbs.current.onSeek?.(stamp.seconds, stamp.part)
               return true
             },
           }),

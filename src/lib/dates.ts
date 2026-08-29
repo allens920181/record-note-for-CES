@@ -60,6 +60,25 @@ export function eachDate(from: string, to: string): string[] {
   return out
 }
 
+/**
+ * How many weeks a term covers, counting the first day as week 1.
+ *
+ * The number used to be typed in beside the two dates, which let all three
+ * disagree: a term could say 15 週 while its dates spanned 12. The dates are
+ * what everything else is built on — a session's week number is measured from
+ * the start date — so the count is read off them rather than stored.
+ */
+export function weeksBetween(start: string, end: string): number {
+  if (!start || !end || end < start) return 1
+  const days = Math.round((fromISO(end).getTime() - fromISO(start).getTime()) / 86_400_000) + 1
+  return Math.max(1, Math.ceil(days / 7))
+}
+
+/** The last day of a term that runs `weeks` weeks from `start`. */
+export function endOfWeeks(start: string, weeks: number): string {
+  return addDays(start, Math.max(1, weeks) * 7 - 1)
+}
+
 /** Minutes since midnight, or null when the time is missing or malformed. */
 export function minutesOf(time: string | undefined | null): number | null {
   if (!time) return null

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { createTerm, db, deleteTermCascade, todayISO } from '../db'
+import { endOfWeeks, weeksBetween } from '../lib/dates'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { SetupBanner } from '../components/SetupBanner'
@@ -20,19 +21,15 @@ export function Dashboard() {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [startDate, setStartDate] = useState(todayISO())
-  const [weeks, setWeeks] = useState(15)
+  // A default end date rather than a default week count: fifteen weeks is the
+  // usual term, but the date is the thing the app actually uses, so that is
+  // what the reader adjusts.
+  const [endDate, setEndDate] = useState(endOfWeeks(todayISO(), 15))
 
   async function submit() {
     const trimmed = name.trim()
-    if (!trimmed) return
-    const end = new Date(`${startDate}T00:00:00`)
-    end.setDate(end.getDate() + weeks * 7)
-    await createTerm({
-      name: trimmed,
-      startDate,
-      endDate: end.toISOString().slice(0, 10),
-      weeks,
-    })
+    if (!trimmed || endDate < startDate) return
+    await createTerm({ name: trimmed, startDate, endDate })
     setName('')
     setCreating(false)
   }
@@ -72,7 +69,8 @@ export function Dashboard() {
                 <Link to={`/term/${t.id}`} className="grow" style={{ textDecoration: 'none', color: 'inherit' }}>
                   <div className="title">{t.name}</div>
                   <div className="sub">
-                    {t.startDate} 起 · {t.weeks} 週 · {counts?.[t.id] ?? 0} 門課
+                    {t.startDate} 起 · {weeksBetween(t.startDate, t.endDate)} 週 ·{' '}
+                    {counts?.[t.id] ?? 0} 門課
                   </div>
                 </Link>
                 <button
@@ -110,7 +108,7 @@ export function Dashboard() {
           onClose={() => setCreating(false)}
           onSubmit={submit}
           submitLabel="建立"
-          submitDisabled={!name.trim()}
+          submitDisabled={!name.trim() || endDate < startDate}
         >
           <div className="field">
             <label htmlFor="term-name">學期名稱</label>
@@ -134,20 +132,22 @@ export function Dashboard() {
               />
             </div>
             <div className="field">
-              <label htmlFor="term-weeks">週數</label>
-              {/* A number, not three options: the generator loops over whatever
-                  integer it is given, so 6 for a summer intensive and 12 for a
-                  block course were only ever excluded by this control. */}
+              <label htmlFor="term-end">結束日期</label>
               <input
-                id="term-weeks"
-                type="number"
-                min={1}
-                max={30}
-                value={weeks}
-                onChange={(e) => setWeeks(Math.max(1, Number(e.target.value) || 1))}
+                id="term-end"
+                type="date"
+                min={startDate}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
               />
-              <div className="hint">之後在學期頁可以改。</div>
             </div>
+          </div>
+          {/* The week count is read off the dates rather than typed beside
+              them:密集課 6 週、暑期班 8 週都只是不同的結束日。 */}
+          <div className="hint" data-testid="term-weeks">
+            {endDate < startDate
+              ? '結束日期不能早於開始日期。'
+              : `共 ${weeksBetween(startDate, endDate)} 週。之後在學期頁可以改。`}
           </div>
         </Modal>
       )}

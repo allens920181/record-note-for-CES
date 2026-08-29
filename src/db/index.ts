@@ -3,7 +3,7 @@ import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
 import { deleteDir, deleteFile } from '../storage/fsRoot'
 import { DEFAULT_SETTINGS, FREE_TIER, MEETING_KINDS, isMeeting } from './schema'
-import { addDays, todayISO } from '../lib/dates'
+import { addDays, endOfWeeks, todayISO, weeksBetween } from '../lib/dates'
 import { correctionKey, diffOnce, isMeaningful, suggestFrom } from '../schedule/corrections'
 import type {
   AppSettings,
@@ -112,6 +112,27 @@ class NotesDB extends Dexie {
     // question is now left to the reader rather than to a table. Setting the
     // store to null deletes it; restoring an older backup simply skips it.
     this.version(7).stores({ workBlocks: null })
+    // v8 drops a term's typed-in week count. The two dates already said the
+    // same thing, and could say something different. Terms created before this
+    // derived their end date from the count, so the two agree — except where
+    // someone edited one and not the other, and there the promise ("this term
+    // runs 15 weeks") wins: the end date is pushed out to cover it before the
+    // field goes, so no term silently gets shorter.
+    this.version(8)
+      .stores({})
+      .upgrade((tx) =>
+        tx
+          .table('terms')
+          .toCollection()
+          .modify((term: { startDate?: string; endDate?: string; weeks?: number }) => {
+            const weeks = Number(term.weeks)
+            if (term.startDate && Number.isFinite(weeks) && weeks > 0) {
+              const promised = endOfWeeks(term.startDate, weeks)
+              if (!term.endDate || term.endDate < promised) term.endDate = promised
+            }
+            delete term.weeks
+          }),
+      )
   }
 }
 
@@ -137,7 +158,6 @@ export async function createTerm(input: {
   name: string
   startDate: string
   endDate: string
-  weeks: number
 }): Promise<string> {
   const id = newId('term')
   await db.terms.add({ ...input, id, archived: false, createdAt: Date.now() })
@@ -194,15 +214,15 @@ export async function deleteCourseCascade(courseId: string): Promise<void> {
  */
 export async function updateTerm(
   termId: string,
-  patch: Partial<Pick<Term, 'name' | 'startDate' | 'endDate' | 'weeks'>>,
+  patch: Partial<Pick<Term, 'name' | 'startDate' | 'endDate'>>,
 ): Promise<{ renumbered: number }> {
   const before = await db.terms.get(termId)
   if (!before) return { renumbered: 0 }
   await db.terms.update(termId, patch)
 
   const movedStart = patch.startDate !== undefined && patch.startDate !== before.startDate
-  const movedWeeks = patch.weeks !== undefined && patch.weeks !== before.weeks
-  if (!movedStart && !movedWeeks) return { renumbered: 0 }
+  const movedEnd = patch.endDate !== undefined && patch.endDate !== before.endDate
+  if (!movedStart && !movedEnd) return { renumbered: 0 }
 
   const courses = await db.courses.where('termId').equals(termId).toArray()
   await Promise.all(courses.map((c) => renumberSessions(c.id)))
@@ -212,7 +232,7 @@ export async function updateTerm(
   return { renumbered: counts.reduce((a, b) => a + b, 0) }
 }
 
-/** How many sessions a date or week-count change would renumber. */
+/** How many sessions a change to the term’s dates would renumber. */
 export async function sessionsInTerm(termId: string): Promise<number> {
   const courses = await db.courses.where('termId').equals(termId).toArray()
   const counts = await Promise.all(
@@ -226,6 +246,43 @@ export async function updateCourse(
   patch: Partial<Pick<Course, 'name' | 'teacher' | 'code' | 'credits' | 'color' | 'slots'>>,
 ): Promise<void> {
   await db.courses.update(courseId, patch)
+}
+
+/**
+ * Names one line's speaker, and remembers the name for next week.
+ *
+ * The mark goes on the line where the turn starts and runs forward from there
+ * (see `speakersOf`), so clearing one hands its lines back to whoever was
+ * speaking before.
+ */
+export async function markSpeaker(
+  transcriptId: string,
+  index: number,
+  name: string | null,
+): Promise<void> {
+  const row = await db.transcripts.get(transcriptId)
+  if (!row || !row.segments[index]) return
+  const segments = row.segments.map((seg, i) => {
+    if (i !== index) return seg
+    const next = { ...seg }
+    if (name) next.speaker = name
+    else delete next.speaker
+    return next
+  })
+  await db.transcripts.update(transcriptId, { segments, updatedAt: Date.now() })
+
+  if (!name) return
+  const course = await courseOfSession(row.sessionId)
+  if (!course) return
+  const roster = course.speakers ?? []
+  if (!roster.includes(name)) {
+    await db.courses.update(course.id, { speakers: [...roster, name] })
+  }
+}
+
+async function courseOfSession(sessionId: string): Promise<Course | undefined> {
+  const session = await db.sessions.get(sessionId)
+  return session ? db.courses.get(session.courseId) : undefined
 }
 
 // ── sessions ──────────────────────────────────────────────────────────
@@ -367,7 +424,8 @@ export async function generateSessionsFromTimetable(courseId: string): Promise<G
   for (const slot of course.slots) {
     const kind: SessionKind = slot.kind === 'discussion' ? 'discussion' : 'lecture'
     const first = nextWeekdayOnOrAfter(term.startDate, slot.weekday)
-    for (let week = 0; week < term.weeks; week++) {
+    const termWeeks = weeksBetween(term.startDate, term.endDate)
+    for (let week = 0; week < termWeeks; week++) {
       const date = addDays(first, week * 7)
       const key = `${date}|${kind}`
       if (taken.has(key)) continue
@@ -389,7 +447,7 @@ export async function generateSessionsFromTimetable(courseId: string): Promise<G
   }
 
   if (rows.length > 0) await db.sessions.bulkAdd(rows)
-  const wanted = course.slots.length * term.weeks
+  const wanted = course.slots.length * weeksBetween(term.startDate, term.endDate)
   return { created: rows.length, skipped: wanted - rows.length }
 }
 
@@ -797,6 +855,21 @@ export async function deleteRecording(recordingId: string): Promise<void> {
  * session, which took the notes with it — so a wrong language setting cost an
  * evening's writing rather than one re-run.
  */
+/**
+ * Removes one recording of a week and the transcript that belongs to it.
+ *
+ * A week can hold several; deleting the one you are looking at should not take
+ * the other two with it, which is what happens when the only handle is the
+ * session.
+ */
+export async function deletePart(recordingId: string): Promise<void> {
+  const row = await db.recordings.get(recordingId)
+  if (row) await deleteFile(row.storageKey)
+  await db.transcripts.where('recordingId').equals(recordingId).delete()
+  await db.recordings.delete(recordingId)
+  await db.jobs.where('recordingId').equals(recordingId).delete()
+}
+
 export async function deleteTranscription(sessionId: string): Promise<void> {
   const [transcripts, recordings] = await Promise.all([
     db.transcripts.where('sessionId').equals(sessionId).toArray(),

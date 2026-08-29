@@ -50,12 +50,17 @@ export interface WorkBlock {
   createdAt: number
 }
 
+/**
+ * A term is two dates. It used to carry a `weeks` count as well, typed in
+ * beside them, which let all three disagree — and everything that matters (a
+ * session's 第 N 週, how far the generator runs) is measured from the dates.
+ * The count is now read off them: see `weeksBetween`.
+ */
 export interface Term {
   id: string
   name: string
   startDate: string // ISO yyyy-mm-dd
   endDate: string
-  weeks: number
   archived: boolean
   createdAt: number
 }
@@ -100,6 +105,11 @@ export interface Course {
   slots: ClassSlot[]
   /** Terms fed to the transcription model so it spells them right. */
   glossary: string[]
+  /**
+   * Who talks in this course — the names offered when marking up a transcript.
+   * Absent on courses created before speakers existed; read it as an empty list.
+   */
+  speakers?: string[]
   /** Absent on courses created before requirements existed. */
   requirements?: CourseRequirements
   createdAt: number
@@ -176,6 +186,20 @@ export interface TranscriptSegment {
   start: number // seconds from the start of the recording
   end: number
   text: string
+  /**
+   * Who starts speaking here.
+   *
+   * Set only on the line where a turn begins; every line after it belongs to
+   * the same person until the next one that names someone. A lecture is one
+   * person talking for forty minutes, so marking each line would be forty
+   * copies of the same fact — and re-marking the lot every time a line is split
+   * or corrected.
+   *
+   * The transcription service does not tell us this: the OpenAI-compatible
+   * `/audio/transcriptions` endpoint has no speaker output at all. It is put
+   * here by hand, helped by the gaps in the audio.
+   */
+  speaker?: string
 }
 
 export interface Transcript {
@@ -406,6 +430,12 @@ export interface AppSettings {
   /** Target bitrate for the opus copy we send for transcription. */
   audioBitrateKbps: number
   /**
+   * How fast recordings play back. Kept here rather than per recording: someone
+   * who listens at 1.5× listens to every week at 1.5×, and having to set it
+   * again on each file is the whole annoyance.
+   */
+  playbackRate: number
+  /**
    * When "測試連線" last succeeded, as an ISO date. A non-empty key is not the
    * same as a working one — a typo, a revoked key and a key for the wrong
    * provider all look identical until something is actually sent — so setup is
@@ -423,7 +453,21 @@ export const DEFAULT_SETTINGS: AppSettings = {
   language: 'zh',
   globalGlossary: [],
   audioBitrateKbps: 32,
+  playbackRate: 1,
 }
+
+/**
+ * The speeds on offer. Whole steps a reader can aim at with one glance —
+ * a continuous slider invites 1.37× and then forgetting it is set.
+ */
+/**
+ * A gap this long between two lines is where a turn usually changes hands — a
+ * question from the room, the teacher picking back up. Only a suggestion: it
+ * puts a hint where marking is likely to be wanted, and marks nothing itself.
+ */
+export const TURN_GAP_SECONDS = 1.5
+
+export const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2] as const
 
 export const COURSE_COLORS = [
   '#1F6F5C',

@@ -296,6 +296,14 @@ a.list-item:hover { border-color: var(--accent); }
   display: grid; grid-template-columns: 4.6rem minmax(0, 1fr); gap: .7rem;
   padding: .3rem .9rem; cursor: pointer; border-left: 2px solid transparent;
 }
+/* A named turn: the name sits above the line it starts, so the lines that
+   follow read as the same person still talking. */
+.tx-seg:has(.tx-who), .tx-seg:has(.spk) { grid-template-columns: 4.6rem auto minmax(0, 1fr); }
+.tx-who {
+  align-self: start; margin-top: .1rem; padding: .05rem .4rem; border-radius: 999px;
+  background: var(--accent-wash); color: var(--accent-ink); border: 1px solid var(--accent);
+  font-size: .74rem; white-space: nowrap; user-select: none;
+}
 .tx-seg:hover { background: var(--surface-2); }
 .tx-seg.active { background: var(--accent-wash); border-left-color: var(--accent); }
 .tx-time {
@@ -306,6 +314,53 @@ a.list-item:hover { border-color: var(--accent); }
 .tx-text { font-size: .9rem; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
 .tx-edit { font-size: .9rem; line-height: 1.75; }
 
+/* naming who is talking */
+.spk { position: relative; align-self: start; }
+.spk-btn {
+  min-width: 1.6rem; padding: .05rem .4rem; border-radius: 999px; cursor: pointer;
+  border: 1px dashed var(--line); background: var(--bg); color: var(--muted); font-size: .74rem;
+}
+.spk-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+/* A silence before this line: probably where someone else started. */
+.spk-btn.is-hint { border-color: var(--accent); color: var(--accent-ink); border-style: dashed; }
+.spk-btn.is-marked {
+  border-style: solid; border-color: var(--accent);
+  background: var(--accent-wash); color: var(--accent-ink);
+}
+.spk-list {
+  position: absolute; z-index: 40; top: calc(100% + .25rem); left: 0; min-width: 11rem;
+  display: flex; flex-direction: column; gap: .1rem; padding: .3rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / .12); cursor: default;
+}
+.spk-item {
+  text-align: left; padding: .35rem .5rem; border: 0; border-radius: 6px;
+  background: none; color: inherit; font-size: .85rem; cursor: pointer;
+}
+.spk-item:hover { background: var(--surface-2); }
+.spk-item.is-here { background: var(--accent-wash); color: var(--accent-ink); }
+.spk-item.is-danger { color: var(--danger); }
+.spk-new { display: flex; gap: .3rem; padding: .25rem; border-top: 1px solid var(--line); }
+.spk-new input { font-size: .82rem; padding: .25rem .4rem; }
+.spk-new .btn { flex: 0 0 auto; }
+select.only-spk { flex: 0 0 auto; width: auto; font-size: .74rem; padding: .15rem 1.3rem .15rem .4rem; }
+
+/* the recordings of one week */
+.parts {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  padding: .4rem .9rem; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.part {
+  display: flex; align-items: baseline; gap: .4rem;
+  padding: .25rem .6rem; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); color: inherit; font-size: .82rem; cursor: pointer;
+}
+.part:hover { border-color: var(--accent); }
+.part.is-here { border-color: var(--accent); background: var(--accent-wash); color: var(--accent-ink); }
+.part.is-here .small { color: inherit; opacity: .75; }
+.parts .btn { flex: 0 0 auto; }
+.parts .btn.is-off { opacity: .5; cursor: default; }
+
 /* audio player */
 .player {
   display: flex; align-items: center; gap: .7rem; flex-wrap: wrap;
@@ -313,6 +368,10 @@ a.list-item:hover { border-color: var(--accent); }
 }
 .player audio { flex: 1 1 16rem; min-width: 0; height: 2.1rem; }
 .player .clock { font-family: var(--mono); font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.player .rate {
+  flex: 0 0 auto; width: auto; padding: .2rem 1.4rem .2rem .45rem;
+  font-size: .78rem; font-variant-numeric: tabular-nums;
+}
 
 /* note editor */
 .cm-editor { height: 100%; font-size: .92rem; }

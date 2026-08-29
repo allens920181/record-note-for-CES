@@ -19,6 +19,12 @@ export interface SearchHit {
   matchLength: number
   /** Seconds into the recording, for transcript hits. */
   seconds?: number
+  /**
+   * Which recording of that week the line is in. A week can hold several, each
+   * with its own clock, so seconds alone would open the right week at the wrong
+   * moment of the wrong file.
+   */
+  recordingId?: string
   fileName?: string
 }
 
@@ -104,6 +110,7 @@ export async function search(query: string, options: SearchOptions = {}): Promis
           label: labelFor(session.id),
           ...snippetAround(seg.text, at, needle.length),
           seconds: seg.start,
+          recordingId: t.recordingId,
         })
         if (hits.length >= limit) return hits
       }

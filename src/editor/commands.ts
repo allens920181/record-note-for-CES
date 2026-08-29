@@ -25,8 +25,12 @@ import {
 export interface NoteContext {
   /** Current playback position, or null when there is no audio. */
   now: () => number | null
-  /** The reader's selection in the transcript, if any. */
-  transcriptQuote: () => { text: string; seconds: number } | null
+  /**
+   * The reader's selection in the transcript, if any. `part` says which
+   * recording of that week it came from, so the quote's timestamp stays
+   * jumpable once a week holds more than one.
+   */
+  transcriptQuote: () => { text: string; seconds: number; part: number } | null
   /**
    * Picks a file, stores it against this block, and reports where it landed —
    * or null when the reader changed their mind or there was nowhere to put it.
@@ -460,7 +464,7 @@ export const NOTE_COMMANDS: NoteCommand[] = [
     run: (v, ctx) => {
       const picked = ctx.transcriptQuote()
       if (!picked) return
-      insertBlock(v, quoteBlock(picked.text, picked.seconds))
+      insertBlock(v, quoteBlock(picked.text, picked.seconds, picked.part))
     },
   },
 ]
@@ -478,11 +482,12 @@ function stamp(seconds: number): string {
  * The timestamp goes on its own line under the quote rather than inside it, so
  * the quote stays exactly what was said and the link stays clickable.
  */
-export function quoteBlock(text: string, seconds: number): string {
+export function quoteBlock(text: string, seconds: number, part = 1): string {
   const body = text
     .trim()
     .split('\n')
     .map((l) => `> ${l}`)
     .join('\n')
-  return `${body}\n> — [[${stamp(seconds)}]]\n`
+  const token = part > 1 ? `[[第${part}段 ${stamp(seconds)}]]` : `[[${stamp(seconds)}]]`
+  return `${body}\n> — ${token}\n`
 }

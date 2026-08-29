@@ -18,8 +18,31 @@ export function parseTime(text: string): number | null {
   return (h ? Number(h) * 3600 : 0) + mins * 60 + secs
 }
 
-/** Matches the [[hh:mm:ss]] tokens the note editor makes clickable. */
-export const TIMESTAMP_TOKEN = /\[\[(\d{1,2}:\d{2}:\d{2})\]\]/g
+/**
+ * Matches the timestamp tokens the note editor makes clickable.
+ *
+ * A week can hold more than one recording — a break in the middle, a phone that
+ * ran out of battery — and each keeps its own clock, so a bare time is ambiguous
+ * as soon as there are two. The part is named when there is one to name:
+ * `[[第2段 00:12:30]]`. A bare `[[00:12:30]]` is the first recording, which is
+ * every token written before this existed and every token in the usual case of
+ * a week with one recording.
+ */
+export const TIMESTAMP_TOKEN = /\[\[(?:第(\d{1,2})段\s*)?(\d{1,2}:\d{2}:\d{2})\]\]/g
+
+/** The token text for a moment, naming the part only when asked to. */
+export function stampToken(seconds: number, part?: number): string {
+  return part && part > 1 ? `[[第${part}段 ${formatTime(seconds)}]]` : `[[${formatTime(seconds)}]]`
+}
+
+/** Reads one token (with or without its brackets) back into part and seconds. */
+export function parseStamp(text: string): { part: number; seconds: number } | null {
+  const m = /^\[?\[?(?:第(\d{1,2})段\s*)?(\d{1,2}:\d{2}:\d{2})\]?\]?$/.exec(text.trim())
+  if (!m) return null
+  const seconds = parseTime(m[2])
+  if (seconds === null) return null
+  return { part: m[1] ? Number(m[1]) : 1, seconds }
+}
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`

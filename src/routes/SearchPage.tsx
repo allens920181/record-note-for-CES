@@ -87,12 +87,14 @@ export function SearchPage() {
       navigate(`/course/${hit.courseId}`)
       return
     }
-    // The timestamp rides along so the workspace can jump straight to the line.
-    navigate(
-      hit.seconds !== undefined
-        ? `/session/${hit.sessionId}?t=${Math.floor(hit.seconds)}`
-        : `/session/${hit.sessionId}`,
-    )
+    // The timestamp rides along so the workspace can jump straight to the line,
+    // and the recording with it — a week can hold several, each on its own clock.
+    if (hit.seconds === undefined) {
+      navigate(`/session/${hit.sessionId}`)
+      return
+    }
+    const part = hit.recordingId ? `&rec=${hit.recordingId}` : ''
+    navigate(`/session/${hit.sessionId}?t=${Math.floor(hit.seconds)}${part}`)
   }
 
   function toggleKind(k: HitKind) {

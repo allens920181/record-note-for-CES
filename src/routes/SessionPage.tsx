@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, deleteTranscription, recordCorrection, saveNote, siblingSessions } from '../db'
+import {
+  db,
+  deletePart,
+  deleteTranscription,
+  getSettings,
+  markSpeaker,
+  recordCorrection,
+  saveNote,
+  saveSettings,
+  siblingSessions,
+} from '../db'
 import type { SessionKind, TranscriptSegment } from '../db/schema'
-import { SESSION_KIND_LABEL } from '../db/schema'
+import { PLAYBACK_RATES, SESSION_KIND_LABEL } from '../db/schema'
 import { readFile, rootStatus } from '../storage/fsRoot'
 import { runTranscription } from '../stt/transcribe'
 import type { RunProgress } from '../stt/transcribe'
@@ -15,6 +25,8 @@ import { keyLabel } from '../editor/keys'
 import { WeekPlanPanel } from '../components/WeekPlanPanel'
 import type { NoteEditorHandle } from '../components/NoteEditor'
 import { RecorderPanel } from '../components/RecorderPanel'
+import { SpeakerPicker } from '../components/SpeakerPicker'
+import { looksLikeTurn, speakersIn, speakersOf } from '../lib/speakers'
 import { AttachmentList } from '../components/AttachmentList'
 import { addAttachment } from '../files/attachments'
 import { Modal } from '../components/Modal'
@@ -48,14 +60,58 @@ export function SessionPage() {
     async () => (session ? db.courses.get(session.courseId) : undefined),
     [session?.courseId],
   )
-  const recording = useLiveQuery(
-    () => db.recordings.where('sessionId').equals(sessionId).last(),
+  /**
+   * Every recording of this week, oldest first.
+   *
+   * A week is not always one file: a break in the middle, a phone that ran out
+   * of battery, a class split over two evenings. They are kept apart rather
+   * than stitched into one timeline — laying them end to end would put a made-up
+   * time on the second one and imply the two were recorded back to back.
+   */
+  const recordingRows = useLiveQuery(
+    () => db.recordings.where('sessionId').equals(sessionId).sortBy('createdAt'),
     [sessionId],
   )
-  const transcript = useLiveQuery(
-    () => db.transcripts.where('sessionId').equals(sessionId).last(),
+  const recordings = useMemo(() => recordingRows ?? [], [recordingRows])
+  const transcriptRows = useLiveQuery(
+    () => db.transcripts.where('sessionId').equals(sessionId).toArray(),
     [sessionId],
   )
+  const transcripts = useMemo(() => transcriptRows ?? [], [transcriptRows])
+
+  /** Which recording the pane and the player are showing. */
+  const [partId, setPartId] = useState<string | null>(null)
+  const recording = useMemo(
+    () => recordings.find((r) => r.id === partId) ?? recordings[0] ?? null,
+    [recordings, partId],
+  )
+  /** 1-based, matching what the part strip and the [[第N段]] tokens say. */
+  const partNo = recording ? recordings.findIndex((r) => r.id === recording.id) + 1 : 1
+  const transcript = useMemo(
+    () =>
+      recording
+        ? (transcripts.find((t) => t.recordingId === recording.id) ?? null)
+        : // A transcript whose audio has been deleted still deserves to be read.
+          (transcripts[transcripts.length - 1] ?? null),
+    [recording, transcripts],
+  )
+
+  // Landing on a week shows its first part; a part added while you are looking
+  // is the one you just made, so that one is opened.
+  // A search result names the recording its line came from, so the workspace
+  // opens that one rather than the first.
+  const wantedPart = searchParams.get('rec')
+  const seenParts = useRef<string[]>([])
+  useEffect(() => {
+    setPartId(wantedPart)
+    seenParts.current = []
+  }, [sessionId, wantedPart])
+  useEffect(() => {
+    const ids = recordings.map((r) => r.id)
+    const added = ids.find((id) => !seenParts.current.includes(id))
+    if (seenParts.current.length > 0 && added) setPartId(added)
+    seenParts.current = ids
+  }, [recordings])
   // `?? null` so "still loading" and "no note yet" are distinguishable:
   // useLiveQuery yields undefined for both, and a session that has never been
   // written to has no row — which used to mean the editor never mounted, and
@@ -70,9 +126,15 @@ export function SessionPage() {
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioMissing, setAudioMissing] = useState(false)
+  const settings = useLiveQuery(() => getSettings(), [])
+  const playbackRate = settings?.playbackRate ?? 1
   const [currentTime, setCurrentTime] = useState(0)
   const [follow, setFollow] = useState(true)
   const [editingTranscript, setEditingTranscript] = useState(false)
+  /** Naming who is speaking, rather than reading. */
+  const [markingSpeakers, setMarkingSpeakers] = useState(false)
+  /** Show only one person's turns, or all of them. */
+  const [onlySpeaker, setOnlySpeaker] = useState('')
   const [glossaryNote, setGlossaryNote] = useState<string | null>(null)
   // null means "follow the default": open while there is nothing to transcribe,
   // closed once the two panes need the height.
@@ -133,6 +195,28 @@ export function SessionPage() {
   }, [recording?.id, recording?.storageKey])
 
   const segments = transcript?.segments ?? []
+  // Set on the element rather than passed as an attribute: React has no
+  // property for it, and a newly loaded file starts at 1× until it is told
+  // otherwise — which is why this also runs when the audio changes.
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.playbackRate = playbackRate
+    // Without this a lecture at 1.5× is a chipmunk; every current browser can
+    // keep the pitch, and the older name is still what Safari answers to.
+    audio.preservesPitch = true
+  }, [playbackRate, audioUrl])
+
+  /**
+   * Who is talking on each line, filled forward from the turn starts, and the
+   * names heard in this part. Up here with the other derivations rather than
+   * beside where they are drawn: everything below the early returns for a
+   * session that is missing or still loading runs conditionally, and a hook
+   * cannot.
+   */
+  const speaking = useMemo(() => speakersOf(segments), [segments])
+  const heard = useMemo(() => speakersIn(segments), [segments])
+
   // With no audio there is no playhead, so no line is the current one — the
   // first line used to sit highlighted as if it were being spoken.
   const activeIndex = useMemo(
@@ -146,9 +230,31 @@ export function SessionPage() {
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [activeIndex, follow])
 
+  // Where to land once a part's audio finishes loading — set when a note's
+  // timestamp points at a part that is not the one currently open.
+  const pendingSeek = useRef<number | null>(null)
+  useEffect(() => {
+    const seconds = pendingSeek.current
+    const audio = audioRef.current
+    if (seconds === null || !audioUrl || !audio) return
+    pendingSeek.current = null
+    const go = () => {
+      audio.currentTime = seconds
+      setCurrentTime(seconds)
+      void audio.play().catch(() => {})
+    }
+    if (audio.readyState >= 1) go()
+    else audio.addEventListener('loadedmetadata', go, { once: true })
+  }, [audioUrl])
+
   // A search result arrives as ?t=seconds; jump there once the audio is ready.
   const jumpTo = searchParams.get('t')
   const jumped = useRef(false)
+  // Reset per destination: the workspace stays mounted between searches, and a
+  // second result used to land on the right week without moving the playhead.
+  useEffect(() => {
+    jumped.current = false
+  }, [sessionId, jumpTo])
   useEffect(() => {
     if (!jumpTo || jumped.current || !audioUrl) return
     const seconds = Number(jumpTo)
@@ -174,9 +280,30 @@ export function SessionPage() {
     })
   }, [])
 
+  /**
+   * A timestamp clicked in the note. It names its part, so the right recording
+   * is opened first — the note is read weeks later, when which file was playing
+   * is long forgotten.
+   */
+  const seekPart = useCallback(
+    (seconds: number, part: number) => {
+      const target = recordings[part - 1]
+      if (target && target.id !== recording?.id) {
+        setPartId(target.id)
+        // The audio for that part has not been read off disk yet; the effect
+        // that loads it hands the position on through `pendingSeek`.
+        pendingSeek.current = seconds
+        setCurrentTime(seconds)
+        return
+      }
+      seek(seconds)
+    },
+    [recordings, recording?.id, seek],
+  )
+
   const stampNow = useCallback(() => {
-    editorRef.current?.insertTimestamp(audioRef.current?.currentTime ?? 0)
-  }, [])
+    editorRef.current?.insertTimestamp(audioRef.current?.currentTime ?? 0, partNo)
+  }, [partNo])
 
   const noteTimer = useRef<number | null>(null)
   // Held so unmount can write it: cancelling the timer without flushing loses
@@ -258,10 +385,11 @@ export function SessionPage() {
     }
     // The transcript goes first so the workspace shows the intake state while
     // this runs; the recording is handed to runTranscription as `replaces` and
-    // removed only once the new one is on disk.
-    await db.transcripts.where('sessionId').equals(sessionId).delete()
+    // removed only once the new one is on disk. Scoped to this part — the other
+    // recordings of the week have nothing to do with it.
+    await db.transcripts.where('recordingId').equals(recording.id).delete()
     await handleFile(new File([file], recording.fileName, { type: file.type }), recording.id)
-  }, [recording, sessionId, handleFile])
+  }, [recording, handleFile])
 
   const plan = useLiveQuery(() => db.weekPlans.get(sessionId), [sessionId])
   const fileCount = useLiveQuery(
@@ -270,6 +398,11 @@ export function SessionPage() {
   ) ?? 0
   const planDone = plan?.items.filter((i) => i.done).length ?? 0
   const planTotal = plan?.items.length ?? 0
+
+  async function setSpeakerAt(index: number, name: string | null) {
+    if (!transcript) return
+    await markSpeaker(transcript.id, index, name)
+  }
 
   async function updateSegment(index: number, text: string) {
     if (!transcript || !course) return
@@ -303,7 +436,7 @@ export function SessionPage() {
    * `currentTime`. Quoting a line you scrolled back to while the audio kept
    * playing would otherwise stamp it with a moment it has nothing to do with.
    */
-  function transcriptQuote(): { text: string; seconds: number } | null {
+  function transcriptQuote(): { text: string; seconds: number; part: number } | null {
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed) return null
     const segOf = (node: Node | null | undefined) => {
@@ -330,7 +463,7 @@ export function SessionPage() {
             .slice(from, to + 1)
             .map((seg) => seg.text.trim())
             .join('')
-    return text ? { text, seconds: start.start } : null
+    return text ? { text, seconds: start.start, part: partNo } : null
   }
 
   /** Pulls the selected transcript into the note as a quote that jumps back. */
@@ -388,6 +521,7 @@ export function SessionPage() {
     )
 
   const hasTranscript = segments.length > 0
+  const roster = course?.speakers ?? []
 
   /**
    * The `/檔案` command's other half: pick a file, store it against this week,
@@ -517,7 +651,7 @@ export function SessionPage() {
             className={`ptab${narrowPane === 'left' ? ' active' : ''}`}
             onClick={() => setNarrowPane('left')}
           >
-            {hasTranscript ? `逐字稿 · ${segments.length} 段` : '錄音與上傳'}
+            {hasTranscript ? `逐字稿 · ${segments.length} 句` : '錄音與上傳'}
           </button>
           <button
             className={`ptab${narrowPane === 'note' ? ' active' : ''}`}
@@ -534,7 +668,10 @@ export function SessionPage() {
                 {showFiles
                   ? '這週的講義'
                   : hasTranscript
-                    ? `逐字稿 · ${segments.length} 段`
+                    ? // 「段」 now means a recording, so the rows inside one are
+                      // counted in 句 — two different things cannot share a word
+                      // on the same screen.
+                      `${recordings.length > 1 ? `第 ${partNo} 段 · ` : ''}逐字稿 · ${segments.length} 句`
                     : '錄音與上傳'}
               </span>
               {hasTranscript && !showFiles && (
@@ -577,6 +714,32 @@ export function SessionPage() {
                   <button className="btn ghost sm" onClick={() => setEditingTranscript((v) => !v)}>
                     {editingTranscript ? '完成編輯' : '修正錯字'}
                   </button>
+                  {!editingTranscript && (
+                    <button
+                      className={`btn ghost sm${markingSpeakers ? ' active' : ''}`}
+                      aria-pressed={markingSpeakers}
+                      title="標記誰在講話——轉錄服務不會分辨說話者，這裡是手動標的"
+                      onClick={() => setMarkingSpeakers((v) => !v)}
+                    >
+                      {markingSpeakers ? '標完了' : '標記說話者'}
+                    </button>
+                  )}
+                  {/* Only worth offering once there is a choice to make. */}
+                  {heard.length > 1 && !markingSpeakers && (
+                    <select
+                      className="only-spk"
+                      aria-label="只看某個人講的"
+                      value={onlySpeaker}
+                      onChange={(e) => setOnlySpeaker(e.target.value)}
+                    >
+                      <option value="">全部的人</option>
+                      {heard.map((n) => (
+                        <option key={n} value={n}>
+                          只看 {n}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <button
                     className="btn ghost sm"
                     title="重新轉錄、換音檔，或刪掉這份逐字稿"
@@ -599,6 +762,53 @@ export function SessionPage() {
 
             {glossaryNote && <div className="pane-flash">{glossaryNote}</div>}
 
+            {/* The parts of this week, and the way to add one. With a single
+                recording there is nothing to switch between, so only the way to
+                add the second one is shown — a strip reading「第 1 段」beside
+                nothing else is a row of furniture. */}
+            {!showFiles && recordings.length > 0 && (
+              <div className="parts" role="tablist" aria-label="這一週的錄音">
+                {recordings.length > 1 &&
+                  recordings.map((r, i) => {
+                    const done = transcripts.some((t) => t.recordingId === r.id)
+                    const here = r.id === recording?.id
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={here}
+                        className={`part${here ? ' is-here' : ''}`}
+                        onClick={() => setPartId(r.id)}
+                      >
+                        第 {i + 1} 段
+                        <span className="small muted">
+                          {formatDuration(r.durationSec)}
+                          {done ? '' : ' · 未轉錄'}
+                        </span>
+                      </button>
+                    )
+                  })}
+                <span className="spacer" />
+                <label className={`btn ghost sm${busy ? ' is-off' : ''}`}>
+                  ＋ 再加一段錄音
+                  <input
+                    type="file"
+                    accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
+                    style={{ display: 'none' }}
+                    disabled={busy}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      e.target.value = ''
+                      // No `replaces`: this one joins the week rather than
+                      // taking another's place.
+                      if (file) void handleFile(file)
+                    }}
+                  />
+                </label>
+              </div>
+            )}
+
             <div className="pane-body" ref={listRef}>
               {showFiles ? (
                 course && (
@@ -615,26 +825,42 @@ export function SessionPage() {
                 )
               ) : hasTranscript ? (
                 <div className="tx-list">
-                  {segments.map((seg, i) => (
-                    <div
-                      key={i}
-                      data-seg={i}
-                      className={`tx-seg${i === activeIndex ? ' active' : ''}`}
-                      onClick={() => !editingTranscript && seek(seg.start)}
-                    >
-                      <span className="tx-time">{formatTime(seg.start)}</span>
-                      {editingTranscript ? (
-                        <textarea
-                          className="tx-edit"
-                          rows={Math.max(1, Math.ceil(seg.text.length / 40))}
-                          defaultValue={seg.text}
-                          onBlur={(e) => void updateSegment(i, e.target.value)}
-                        />
-                      ) : (
-                        <span className="tx-text">{seg.text}</span>
-                      )}
-                    </div>
-                  ))}
+                  {segments.map((seg, i) => {
+                    // Filtering hides lines rather than renumbering them: the
+                    // index is what every other part of this page addresses.
+                    if (onlySpeaker && speaking[i] !== onlySpeaker) return null
+                    return (
+                      <div
+                        key={i}
+                        data-seg={i}
+                        className={`tx-seg${i === activeIndex ? ' active' : ''}`}
+                        onClick={() => !editingTranscript && seek(seg.start)}
+                      >
+                        <span className="tx-time">{formatTime(seg.start)}</span>
+                        {markingSpeakers ? (
+                          <SpeakerPicker
+                            roster={roster}
+                            value={speaking[i]}
+                            marked={Boolean(seg.speaker)}
+                            suggested={looksLikeTurn(segments, i)}
+                            onPick={(name) => void setSpeakerAt(i, name)}
+                          />
+                        ) : (
+                          seg.speaker && <span className="tx-who">{seg.speaker}</span>
+                        )}
+                        {editingTranscript ? (
+                          <textarea
+                            className="tx-edit"
+                            rows={Math.max(1, Math.ceil(seg.text.length / 40))}
+                            defaultValue={seg.text}
+                            onBlur={(e) => void updateSegment(i, e.target.value)}
+                          />
+                        ) : (
+                          <span className="tx-text">{seg.text}</span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
                 <div style={{ padding: '1.1rem .9rem 2rem' }}>
@@ -674,6 +900,20 @@ export function SessionPage() {
                         onClick={() => abortRef.current?.abort()}
                       >
                         取消
+                      </button>
+                    </div>
+                  ) : recording ? (
+                    // Audio on disk with nothing transcribed from it: offering
+                    // the recorder here would quietly start a third part, when
+                    // what is missing is a transcript for the one already here.
+                    <div className="card">
+                      <h2>這一段還沒有逐字稿</h2>
+                      <p className="small muted" style={{ margin: '.4rem 0 .9rem' }}>
+                        {recording.fileName} · {formatDuration(recording.durationSec)} 已經在你的資料夾裡。
+                        轉錄可能是中途取消，或是額度不夠停下來了。
+                      </p>
+                      <button className="btn primary" onClick={() => void transcribeAgain()}>
+                        轉錄這一段
                       </button>
                     </div>
                   ) : (
@@ -752,8 +992,28 @@ export function SessionPage() {
                       controls
                       preload="metadata"
                       onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                      onLoadedMetadata={(e) => {
+                        e.currentTarget.playbackRate = playbackRate
+                        e.currentTarget.preservesPitch = true
+                      }}
                     />
                     <span className="clock">{formatTime(currentTime)}</span>
+                    {/* The browser hides its own speed menu three clicks deep
+                        and forgets it on the next file. Three hours of lecture
+                        at 1.5× is an hour saved every week. */}
+                    <select
+                      className="rate"
+                      aria-label="播放速度"
+                      title="播放速度"
+                      value={playbackRate}
+                      onChange={(e) => void saveSettings({ playbackRate: Number(e.target.value) })}
+                    >
+                      {PLAYBACK_RATES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}×
+                        </option>
+                      ))}
+                    </select>
                   </>
                 )}
               </div>
@@ -830,7 +1090,7 @@ export function SessionPage() {
                   ref={editorRef}
                   initialValue={note?.markdown ?? ''}
                   onChange={onNoteChange}
-                  onSeek={seek}
+                  onSeek={seekPart}
                   onStampRequested={stampNow}
                   context={{
                     now: () => (hasTranscript ? currentTime : null),
@@ -847,12 +1107,13 @@ export function SessionPage() {
 
       {redo && (
         <Modal
-          title="這份逐字稿"
+          title={recordings.length > 1 ? `第 ${partNo} 段錄音` : '這份逐字稿'}
           onClose={() => setRedo(null)}
           submitLabel={undefined}
         >
           <p className="small muted" style={{ margin: '0 0 .9rem' }}>
             以下三個動作都<strong>只影響逐字稿與音檔</strong>——你的筆記和本週進度會原封不動留著。
+            {recordings.length > 1 && `這一週有 ${recordings.length} 段錄音，動到的只有第 ${partNo} 段。`}
           </p>
           <div className="stack">
             <button
@@ -883,7 +1144,9 @@ export function SessionPage() {
                   if (!file) return
                   setRedo(null)
                   void (async () => {
-                    await db.transcripts.where('sessionId').equals(sessionId).delete()
+                    if (recording) {
+                      await db.transcripts.where('recordingId').equals(recording.id).delete()
+                    }
                     await handleFile(file, recording?.id)
                   })()
                 }}
@@ -893,12 +1156,16 @@ export function SessionPage() {
               className="btn danger"
               onClick={async () => {
                 setRedo(null)
-                await deleteTranscription(sessionId)
+                setPartId(null)
+                if (recording && recordings.length > 1) await deletePart(recording.id)
+                else await deleteTranscription(sessionId)
               }}
             >
-              刪除逐字稿與音檔
+              {recordings.length > 1 ? `刪除第 ${partNo} 段` : '刪除逐字稿與音檔'}
               <span className="small muted" style={{ display: 'block', fontWeight: 400 }}>
-                回到還沒錄音的狀態。筆記與本週進度保留。
+                {recordings.length > 1
+                  ? '其他幾段錄音留著。筆記與本週進度也保留。'
+                  : '回到還沒錄音的狀態。筆記與本週進度保留。'}
               </span>
             </button>
           </div>
