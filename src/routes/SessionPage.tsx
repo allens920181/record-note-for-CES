@@ -133,9 +133,11 @@ export function SessionPage() {
   }, [recording?.id, recording?.storageKey])
 
   const segments = transcript?.segments ?? []
+  // With no audio there is no playhead, so no line is the current one — the
+  // first line used to sit highlighted as if it were being spoken.
   const activeIndex = useMemo(
-    () => (segments.length ? findActive(segments, currentTime) : -1),
-    [segments, currentTime],
+    () => (audioUrl && segments.length ? findActive(segments, currentTime) : -1),
+    [audioUrl, segments, currentTime],
   )
 
   useEffect(() => {
@@ -562,13 +564,16 @@ export function SessionPage() {
                       </button>
                     </>
                   )}
-                  <button
-                    className="btn ghost sm"
-                    onClick={() => setFollow((f) => !f)}
-                    title="播放時自動捲到目前這一句"
-                  >
-                    {follow ? '跟播中' : '不跟播'}
-                  </button>
+                  {/* Nothing to follow without audio. */}
+                  {audioUrl && (
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => setFollow((f) => !f)}
+                      title="播放時自動捲到目前這一句"
+                    >
+                      {follow ? '跟播中' : '不跟播'}
+                    </button>
+                  )}
                   <button className="btn ghost sm" onClick={() => setEditingTranscript((v) => !v)}>
                     {editingTranscript ? '完成編輯' : '修正錯字'}
                   </button>
