@@ -33,6 +33,23 @@ import { addAttachment } from '../files/attachments'
 import { Modal } from '../components/Modal'
 import { useConfirm } from '../components/ConfirmProvider'
 
+/**
+ * What a selection actually holds, without the furniture around the words.
+ *
+ * The time and the speaker's name sit at the left of every line — which is
+ * where a left-to-right drag starts, so both are caught in the selection.
+ * Marking them `user-select: none` looked like the fix and was worse: a
+ * selection cannot begin inside such an element, so dragging from the natural
+ * place selected nothing at all.
+ */
+function selectedText(sel: Selection): string {
+  if (sel.rangeCount === 0) return ''
+  const holder = document.createElement('div')
+  holder.append(sel.getRangeAt(0).cloneContents())
+  holder.querySelectorAll('.tx-time, .tx-who, .spk').forEach((el) => el.remove())
+  return holder.textContent ?? ''
+}
+
 /** Index of the last segment that has started by time `t`. */
 function findActive(segments: TranscriptSegment[], t: number): number {
   let lo = 0
@@ -459,7 +476,7 @@ export function SessionPage() {
     // of every row caught in the middle.
     const text =
       from === to
-        ? sel.toString().trim()
+        ? selectedText(sel).trim()
         : segments
             .slice(from, to + 1)
             .map((seg) => seg.text.trim())
@@ -469,20 +486,25 @@ export function SessionPage() {
 
   /** Pulls the selected transcript into the note as a quote that jumps back. */
   function quoteIntoNote() {
-    if (!transcriptQuote()) {
-      setGlossaryNote('請先在左邊的逐字稿選取要引用的句子。')
+    const picked = transcriptQuote()
+    if (!picked) {
+      setGlossaryNote('先在左邊的逐字稿上按住滑鼠、拖過想引用的那句話，再按這裡。')
       return
     }
     editorRef.current?.run('transcript')
     setNarrowPane('note')
+    // Said out loud: the note may be off-screen on a narrow window, and an
+    // action that reports nothing is indistinguishable from one that failed.
+    setGlossaryNote(`已引用到筆記：「${picked.text.slice(0, 12)}${picked.text.length > 12 ? '…' : ''}」`)
   }
 
   /** Adds whatever is selected in the transcript to this course's glossary. */
   async function addSelectionToGlossary() {
     if (!course) return
-    const term = window.getSelection()?.toString().trim() ?? ''
+    const sel = window.getSelection()
+    const term = sel ? selectedText(sel).trim() : ''
     if (!term) {
-      setGlossaryNote('請先在左邊的逐字稿選取要加入的字。')
+      setGlossaryNote('先在左邊的逐字稿上拖過那個詞，再按這裡。')
       return
     }
     if (term.length > 40) {
@@ -842,7 +864,14 @@ export function SessionPage() {
                         key={i}
                         data-seg={i}
                         className={`tx-seg${i === activeIndex ? ' active' : ''}`}
-                        onClick={() => !editingTranscript && seek(seg.start)}
+                        onClick={() => {
+                          if (editingTranscript) return
+                          // A drag that ends here is a selection, not a request
+                          // to jump: seeking would start playing and scroll the
+                          // list out from under what was just selected.
+                          if (!window.getSelection()?.isCollapsed) return
+                          seek(seg.start)
+                        }}
                       >
                         <span className="tx-time">{formatTime(seg.start)}</span>
                         {markingSpeakers ? (

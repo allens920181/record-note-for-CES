@@ -307,13 +307,19 @@ a.list-item:hover { border-color: var(--accent); }
 .tx-who {
   align-self: start; margin-top: .1rem; padding: .05rem .4rem; border-radius: 999px;
   background: var(--accent-wash); color: var(--accent-ink); border: 1px solid var(--accent);
-  font-size: .74rem; white-space: nowrap; user-select: none;
+  font-size: .74rem; white-space: nowrap;
 }
 .tx-seg:hover { background: var(--surface-2); }
 .tx-seg.active { background: var(--accent-wash); border-left-color: var(--accent); }
+/* Deliberately selectable, though nothing here is meant to be quoted: a
+   selection cannot *begin* inside a `user-select: none` element, and the left
+   edge of a line — this column, and the speaker's name beside it — is exactly
+   where a left-to-right drag starts. Marking them unselectable meant that a
+   reader dragging from the natural place selected nothing at all. What gets
+   quoted is filtered afterwards instead, in `selectedText`. */
 .tx-time {
   font-family: var(--mono); font-size: .74rem; color: var(--muted);
-  padding-top: .18rem; font-variant-numeric: tabular-nums; user-select: none;
+  padding-top: .18rem; font-variant-numeric: tabular-nums;
 }
 .tx-seg.active .tx-time { color: var(--accent-ink); }
 .tx-text { font-size: .9rem; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
