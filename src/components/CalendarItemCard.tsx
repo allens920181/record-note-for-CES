@@ -24,7 +24,7 @@ interface Props {
 const KIND_LABEL: Record<CalendarItem['kind'], string> = {
   lecture: MEETING_KIND_LABEL.lecture,
   discussion: MEETING_KIND_LABEL.discussion,
-  work: '作業時間',
+  work: '寫作業時段',
   deadline: '繳交期限',
 }
 
@@ -88,7 +88,7 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
       await renumberSessions(item.courseId)
     } else if (item.workBlockId) {
       if (!start || !end) {
-        setError('作業時間需要開始與結束。')
+        setError('寫作業時段需要開始與結束。')
         return
       }
       await updateWorkBlock(item.workBlockId, { date, start, end })
@@ -109,7 +109,7 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
       await renumberSessions(item.courseId)
     } else if (item.workBlockId) {
       const go = await ask({
-        title: series ? '刪除每週固定的作業時間？' : `刪除 ${item.date} 的作業時間？`,
+        title: series ? '刪除每週固定的寫作業時段？' : `刪除 ${item.date} 的寫作業時段？`,
         danger: true,
         confirmLabel: series ? '刪除整個每週時段' : '刪除這段時間',
         body: series ? (
@@ -159,8 +159,8 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
 
       {series && (
         <div className="notice" style={{ marginBottom: '.9rem' }}>
-          這是<strong>每週</strong>固定的作業時間（每週{WEEKDAY_SHORT[weekdayOf(item.date)]}
-          ），不是只有這一天。改時間要改整段，到課程頁的「設定」。
+          這是<strong>每週</strong>固定的寫作業時段（每週{WEEKDAY_SHORT[weekdayOf(item.date)]}
+          ），不是只有這一天。改時間要改整段，到課程頁的「作業與閱讀」。
         </div>
       )}
 

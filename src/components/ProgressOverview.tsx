@@ -41,6 +41,9 @@ export function ProgressOverview({ courseId }: Props) {
 
   if (!progress) return null
   const { plannedWeeks, completedWeeks, itemsDone, itemsTotal, hoursLeft, weeks } = progress
+  // With no weeks yet there is nothing to be behind on, and the list below
+  // already says so. Two empty states for one fact read as a cluttered page.
+  if (weeks.length === 0) return null
   const pct = itemsTotal > 0 ? Math.round((itemsDone / itemsTotal) * 100) : 0
   const unplanned = weeks.filter((w) => !w.canceled && w.total === 0).length
 
@@ -57,8 +60,7 @@ export function ProgressOverview({ courseId }: Props) {
 
       {plannedWeeks === 0 ? (
         <p className="small muted" style={{ margin: '.4rem 0 0' }}>
-          還沒有任何一週排進度。點下面任何一週進去，在「本週進度」排你打算做的事——
-          課前讀完、課後整理、報告推進一段。
+          點下面任何一週，在「本週進度」排你打算做的事——課前讀完、課後整理、報告推進一段。
         </p>
       ) : (
         <>
@@ -66,7 +68,6 @@ export function ProgressOverview({ courseId }: Props) {
             已排進度的 {plannedWeeks} 週裡完成 {itemsDone} / {itemsTotal} 項
             {hoursLeft > 0 && ` · 未完成的部分估計還要 ${hoursLeft} 小時`}
             {unplanned > 0 && ` · 還有 ${unplanned} 週沒排`}。
-            沒排進度的週次不算落後，只是還沒想過。
           </p>
           <div className="progress">
             <div style={{ width: `${pct}%`, background: 'var(--accent)' }} />

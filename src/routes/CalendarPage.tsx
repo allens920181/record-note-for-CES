@@ -123,9 +123,9 @@ export function CalendarPage() {
     if (item.assignmentId)
       navigate(`/assignments?term=${activeTermId ?? ''}#${item.assignmentId}`)
     else if (item.sessionId) navigate(`/session/${item.sessionId}`)
-    // Study time lives on the setup tab; landing on 週次 showed a page with no
-    // sign of the thing that was clicked.
-    else navigate(`/course/${item.courseId}?tab=setup`)
+    // Study time lives beside the assignments it is there to make room for;
+    // landing on 週次 showed a page with no sign of the thing that was clicked.
+    else navigate(`/course/${item.courseId}?tab=work`)
   }
 
   async function submitDraft() {
@@ -151,7 +151,7 @@ export function CalendarPage() {
         <div className="page-head">
           <div className="grow">
             <h1>行事曆</h1>
-            <p>點一下空白處就能新增課程、分組討論或作業時間。點既有的項目會開啟那一週的筆記。</p>
+            <p>點一下空白處就能排一堂課、分組討論，或一段寫作業的時間。點既有的項目會開啟那一週的筆記。</p>
           </div>
         </div>
 

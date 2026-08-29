@@ -1,5 +1,5 @@
 import type { Assignment, Course, Session, WorkBlock } from '../db'
-import { MEETING_KIND_LABEL } from '../db/schema'
+import { MEETING_KIND_LABEL, isMeeting } from '../db/schema'
 import { addDays, minutesOf, weekdayOf } from '../lib/dates'
 
 export type ItemKind = 'lecture' | 'discussion' | 'work' | 'deadline'
@@ -53,6 +53,9 @@ export function expandOccurrences({
 
   for (const session of sessions) {
     if (session.date < from || session.date > to) continue
+    // Note blocks are not meetings: nothing happens at an hour, so putting them
+    // on a grid of hours would be inventing a time they do not have.
+    if (!isMeeting(session.kind)) continue
     const course = byId.get(session.courseId)
     if (!course) continue
     const kind: ItemKind = session.kind ?? 'lecture'
@@ -82,7 +85,7 @@ export function expandOccurrences({
       color: course.color,
       startMin: minutesOf(block.start),
       endMin: minutesOf(block.end),
-      title: `${course.name} · 作業時間`,
+      title: `${course.name} · 寫作業`,
       detail: block.note,
       workBlockId: block.id,
     }

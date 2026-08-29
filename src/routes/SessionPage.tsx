@@ -16,6 +16,7 @@ import { WeekPlanPanel } from '../components/WeekPlanPanel'
 import type { NoteEditorHandle } from '../components/NoteEditor'
 import { RecorderPanel } from '../components/RecorderPanel'
 import { AttachmentList } from '../components/AttachmentList'
+import { addAttachment } from '../files/attachments'
 import { Modal } from '../components/Modal'
 import { useConfirm } from '../components/ConfirmProvider'
 
@@ -288,7 +289,7 @@ export function SessionPage() {
       learned
         ? `同樣的修正出現第二次了，已把「${learned}」加入詞彙表。`
         : recorded
-          ? '已記錄這次修正，可到課程頁的「轉錄修正」挑出要記住的詞。'
+          ? '已記錄這次修正，可到課程頁的「詞彙表」挑出要記住的詞。'
           : null,
     )
   }
@@ -385,6 +386,48 @@ export function SessionPage() {
     )
 
   const hasTranscript = segments.length > 0
+
+  /**
+   * The `/檔案` command's other half: pick a file, store it against this week,
+   * and hand back where it went so the note can link to it. The file shows up
+   * in the course's 文件總覽 because that reads the same attachment rows.
+   */
+  async function attachFile(): Promise<{ fileName: string; storageKey: string } | null> {
+    if (!session) return null
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.style.display = 'none'
+    // In the document, not detached: a floating input's click does not always
+    // count as the gesture that is allowed to open a file picker.
+    document.body.append(input)
+    try {
+      const picked = await new Promise<File | null>((resolve) => {
+        input.onchange = () => resolve(input.files?.[0] ?? null)
+        // No 'cancel' event in older browsers, so a dismissed picker simply
+        // never resolves — the promise is dropped along with the command.
+        input.oncancel = () => resolve(null)
+        input.click()
+      })
+      if (!picked) return null
+      return await store(picked)
+    } finally {
+      input.remove()
+    }
+  }
+
+  async function store(picked: File): Promise<{ fileName: string; storageKey: string } | null> {
+    if (!session) return null
+    const id = await addAttachment({
+      scope: 'session',
+      ownerId: sessionId,
+      courseId: session.courseId,
+      kind: 'handout',
+      file: picked,
+    })
+    const row = await db.attachments.get(id)
+    return row ? { fileName: row.fileName, storageKey: row.storageKey } : null
+  }
+
   const showPlan = planOpen ?? !hasTranscript
   const kindLabel = SESSION_KIND_LABEL[(session.kind ?? 'lecture') as SessionKind]
 
@@ -785,6 +828,7 @@ export function SessionPage() {
                   context={{
                     now: () => (hasTranscript ? currentTime : null),
                     transcriptQuote,
+                    attachFile,
                   }}
                   onOutline={(entries, line) => setOutline({ entries, line })}
                 />

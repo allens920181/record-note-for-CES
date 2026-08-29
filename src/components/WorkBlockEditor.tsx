@@ -53,12 +53,7 @@ export function WorkBlockEditor({ courseId, termWeeks, defaultDate }: Props) {
 
   return (
     <section className="card" style={{ marginBottom: '1.25rem' }}>
-      <h2>作業時間</h2>
-      <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
-        課外挪出來寫作業的時段。<strong>不會產生任何檔案</strong>，也不錄音——
-        它存在的目的是讓作業規劃算得出「截止日之前實際還剩幾小時」。
-        可以是每週固定的，也可以是為某份報告單獨空出來的一天。
-      </p>
+      <h2>寫作業的時段</h2>
 
       {blocks && blocks.length > 0 ? (
         <div className="stack" style={{ marginBottom: '.9rem' }}>
@@ -147,7 +142,14 @@ export function WorkBlockEditor({ courseId, termWeeks, defaultDate }: Props) {
         </div>
       ) : (
         <div className="empty" style={{ padding: '1.25rem', marginBottom: '.9rem' }}>
-          還沒安排作業時間。
+          <p style={{ margin: 0 }}>還沒安排時段。</p>
+          <p
+            className="small muted"
+            style={{ margin: '.5rem auto 0', maxWidth: '32rem', textAlign: 'left' }}
+          >
+            你課外坐下來寫作業的時間。不錄音、不產生檔案——
+            排在這裡，作業規劃才算得出「截止日之前實際還剩幾小時」。
+          </p>
         </div>
       )}
 
@@ -155,7 +157,7 @@ export function WorkBlockEditor({ courseId, termWeeks, defaultDate }: Props) {
         {/* The row that appears already carries a 重複 select, so a button per
             shape was two ways to reach the same row. */}
         <button className="btn" style={{ flex: '0 0 auto' }} onClick={() => add('weekly')}>
-          新增作業時間
+          新增寫作業時段
         </button>
       </div>
 

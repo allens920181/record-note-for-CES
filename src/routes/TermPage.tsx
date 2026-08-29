@@ -53,6 +53,9 @@ export function TermPage() {
         code: draft.code.trim(),
         credits: draft.credits,
         color: COURSE_COLORS[(courses?.length ?? 0) % COURSE_COLORS.length],
+        // Said once, here: a new course used to be created without a time and
+        // then need a second errand on another screen to acquire one.
+        slots: draft.slots,
       })
     }
     setDraft(EMPTY_COURSE)
@@ -169,7 +172,7 @@ export function TermPage() {
                           會一起消失的：
                           <ul>
                             <li>這門課的 {sessionCounts?.[c.id] ?? 0} 個週次，以及它們的逐字稿與筆記</li>
-                            <li>課表、作業時間、作業、閱讀材料、專有名詞表</li>
+                            <li>課表、寫作業時段、作業、閱讀材料、專有名詞表</li>
                             <li>上傳到這門課的所有檔案</li>
                           </ul>
                           要改課名或老師的話，用旁邊的「編輯」就好。
@@ -190,6 +193,7 @@ export function TermPage() {
                       code: c.code,
                       credits: c.credits,
                       color: c.color,
+                      slots: c.slots,
                     })
                     setEditing(c.id)
                     setCreating(true)
@@ -205,6 +209,7 @@ export function TermPage() {
 
       {creating && (
         <Modal
+          wide
           title={editing ? '編輯課程' : '新增課程'}
           onClose={() => {
             setCreating(false)

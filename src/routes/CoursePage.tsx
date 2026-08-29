@@ -8,34 +8,75 @@ import {
   sessionsInOrder,
   updateCourse,
   generateSessionsFromTimetable,
+  insertNoteBlock,
   renumberSessions,
   sumWorkHours,
   todayISO,
 } from '../db'
-import type { ClassSlot } from '../db'
-import { MEETING_KINDS, MEETING_KIND_LABEL, SESSION_KIND_LABEL } from '../db/schema'
-import type { MeetingKind } from '../db/schema'
+import { SESSION_KIND_LABEL, isMeeting } from '../db/schema'
+import type { SessionKind } from '../db/schema'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
-import { AttachmentList } from '../components/AttachmentList'
 import { WorkBlockEditor } from '../components/WorkBlockEditor'
 import { ReadingList } from '../components/ReadingList'
 import { CorrectionsPanel } from '../components/CorrectionsPanel'
+import { FileOverview } from '../components/FileOverview'
 import { RequirementsPanel } from '../components/RequirementsPanel'
 import { ProgressOverview } from '../components/ProgressOverview'
 import { Modal } from '../components/Modal'
 import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
-import { TimeField } from '../components/TimeField'
 import { GlossaryChips } from '../components/GlossaryChips'
 import { ProgressTag } from '../components/ProgressTag'
-import { BlurField } from '../components/BlurField'
 import { TimeBlockDialog, createTimeBlock, makeDraft } from '../components/TimeBlockDialog'
 import type { TimeBlockDraft } from '../components/TimeBlockDialog'
 import { useConfirm } from '../components/ConfirmProvider'
 import { AssignmentCard, NewAssignmentDialog } from '../components/AssignmentCard'
 
-type Tab = 'sessions' | 'setup' | 'work' | 'require'
-const TABS: string[] = ['sessions', 'setup', 'work', 'require']
+/** The two dialogs that hold everything which is about the course, not a week. */
+type Panel = 'rules' | 'files'
+const PANELS: string[] = ['rules', 'files']
+
+const INSERT_KINDS: { kind: SessionKind; label: string; hint: string }[] = [
+  { kind: 'discussion', label: '分組討論', hint: '會發生的聚會，可以錄音' },
+  { kind: 'log', label: '作業紀錄', hint: '這份報告做到哪、卡在哪' },
+  { kind: 'memo', label: '其他筆記', hint: '不屬於任何一堂課的東西' },
+]
+
+/**
+ * The hairline between two blocks, and the way to put something there.
+ *
+ * Always in the tree rather than conjured on hover: a control that only exists
+ * for a mouse cannot be reached by tab, and this is the only way to file a note
+ * between two weeks.
+ */
+function Inserter({ onPick, label }: { onPick: (kind: SessionKind) => void; label: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={`inserter${open ? ' is-open' : ''}`}>
+      <button className="inserter-plus" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}>
+        ＋
+      </button>
+      {open && (
+        <div className="inserter-menu" role="menu">
+          {INSERT_KINDS.map((k) => (
+            <button
+              key={k.kind}
+              role="menuitem"
+              className="inserter-item"
+              onClick={() => {
+                setOpen(false)
+                onPick(k.kind)
+              }}
+            >
+              <span className="inserter-label">{k.label}</span>
+              <span className="inserter-hint">{k.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 
 export function CoursePage() {
@@ -45,13 +86,17 @@ export function CoursePage() {
   // button returns to the one you were on, and the calendar can send you
   // straight to 作業時間 instead of dropping you on 週次 with no sign of it.
   const [params, setParams] = useSearchParams()
-  const tab = (TABS.includes(params.get('tab') as Tab) ? params.get('tab') : 'sessions') as Tab
-  const setTab = (next: Tab) =>
+  // In the URL so a link can open a dialog, the back button closes it, and the
+  // calendar can point straight at the study time inside 課程規定與作業.
+  const panel = (PANELS.includes(params.get('panel') ?? '') ? params.get('panel') : null) as
+    | Panel
+    | null
+  const setPanel = (next: Panel | null) =>
     setParams(
       (prev) => {
         const p = new URLSearchParams(prev)
-        if (next === 'sessions') p.delete('tab')
-        else p.set('tab', next)
+        if (next) p.set('panel', next)
+        else p.delete('panel')
         return p
       },
       { replace: true },
@@ -129,10 +174,6 @@ export function CoursePage() {
   const hours = sumWorkHours(workBlocks ?? [], term?.weeks ?? 0)
   const today = todayISO()
 
-  async function patchSlots(next: ClassSlot[]) {
-    await db.courses.update(courseId, { slots: next })
-  }
-
   async function generate() {
     setMessage(null)
     try {
@@ -145,10 +186,29 @@ export function CoursePage() {
             ? '這些時段的週次都已經存在了，沒有新增任何一個。'
             : `產生了 ${created} 個週次${skipped > 0 ? `，另有 ${skipped} 個已存在而略過` : ''}。`,
       })
-      setTab('sessions')
     } catch (err) {
       setMessage({ kind: 'err', text: err instanceof Error ? err.message : String(err) })
     }
+  }
+
+  /** Opens the course dialog, which is where the weekly timetable lives. */
+  function editCourse() {
+    if (!course) return
+    setCourseDraft({
+      name: course.name,
+      teacher: course.teacher,
+      code: course.code,
+      credits: course.credits,
+      color: course.color,
+      slots: course.slots,
+    })
+  }
+
+  async function insertAt(kind: SessionKind, after: string | null) {
+    const id = await insertNoteBlock(courseId, kind, after)
+    await renumberSessions(courseId)
+    setMessage({ kind: 'ok', text: `已加入一個${SESSION_KIND_LABEL[kind]}。` })
+    return id
   }
 
   function openAdd() {
@@ -192,45 +252,9 @@ export function CoursePage() {
                       }`,
                   )
                   .join('、')}`}
-              {hours.total > 0 && ` · 作業時間共 ${hours.total} 小時`}
+              {hours.total > 0 && ` · 寫作業時段共 ${hours.total} 小時`}
             </p>
           </div>
-          <button
-            className="btn"
-            style={{ flex: '0 0 auto' }}
-            onClick={() => {
-              setCourseDraft({
-                name: course.name,
-                teacher: course.teacher,
-                code: course.code,
-                credits: course.credits,
-                color: course.color,
-              })
-            }}
-          >
-            編輯課程
-          </button>
-        </div>
-
-        <div className="tabs">
-          <button
-            className={`tab${tab === 'sessions' ? ' active' : ''}`}
-            onClick={() => setTab('sessions')}
-          >
-            週次 {sessions ? `(${sessions.length})` : ''}
-          </button>
-          <button className={`tab${tab === 'setup' ? ' active' : ''}`} onClick={() => setTab('setup')}>
-            課表 · 作業時間 · 詞彙表
-          </button>
-          <button className={`tab${tab === 'work' ? ' active' : ''}`} onClick={() => setTab('work')}>
-            作業 · 閱讀
-          </button>
-          <button
-            className={`tab${tab === 'require' ? ' active' : ''}`}
-            onClick={() => setTab('require')}
-          >
-            課堂要求 · 書目
-          </button>
         </div>
 
         {message && (
@@ -239,20 +263,14 @@ export function CoursePage() {
           </div>
         )}
 
-        {tab === 'sessions' && (
-          <>
+        <div className="course-body">
+          <div className="course-blocks">
             <ProgressOverview courseId={courseId} />
 
             <div className="row" style={{ gap: '.6rem', marginBottom: '1rem' }}>
-              {/* One button, not one per kind: the kind is a field in the
-                  dialog, which also lets a weekly meeting be added from here
-                  instead of only from the other tab. */}
               <button className="btn primary" style={{ flex: '0 0 auto' }} onClick={openAdd}>
-                新增聚會
+                新增一堂課
               </button>
-              {/* Only offered when it can work. The reason it cannot is a line
-                  on screen with a link, not a `title` — which touch and keyboard
-                  users never see at all. */}
               {slots.length > 0 ? (
                 <button className="btn" style={{ flex: '0 0 auto' }} onClick={generate}>
                   依課表產生整學期
@@ -262,7 +280,7 @@ export function CoursePage() {
                 sessions.length > 0 && (
                   <span className="small muted" style={{ flex: '0 0 auto', alignSelf: 'center' }}>
                     還沒有每週固定的時段，
-                    <button className="linkish" onClick={() => setTab('setup')}>
+                    <button className="linkish" onClick={editCourse}>
                       去設課表
                     </button>
                     後就能一次產生整學期。
@@ -275,35 +293,23 @@ export function CoursePage() {
               <div className="empty">載入中…</div>
             ) : sessions.length === 0 ? (
               <div className="empty">
-                <p>
-                  還沒有任何週次。每週固定的課先設好課表，就能一次產生整學期；
-                  只開一次的聚會用「新增聚會」挑日期。
-                </p>
-                {/* The button this used to name lives on another tab, which is
-                    the one thing an empty state must never do. */}
-                <div className="row" style={{ gap: '.5rem', justifyContent: 'center' }}>
-                  {slots.length === 0 ? (
-                    <button
-                      className="btn primary"
-                      style={{ flex: '0 0 auto' }}
-                      onClick={() => setTab('setup')}
-                    >
-                      去設定課表
-                    </button>
-                  ) : (
-                    <button className="btn primary" style={{ flex: '0 0 auto' }} onClick={generate}>
-                      依課表產生整學期
-                    </button>
-                  )}
-                  {/* The same words as the toolbar's button: one action must
-                      not answer to two names depending on where it is met. */}
-                  <button className="btn" style={{ flex: '0 0 auto' }} onClick={openAdd}>
-                    新增聚會
+                <p>還沒有任何一堂課。</p>
+                <p className="small muted">每週都上的課先設好課表，就能一次產生整學期。</p>
+                {slots.length === 0 ? (
+                  <button className="btn primary" onClick={editCourse}>
+                    去設定課表
                   </button>
-                </div>
+                ) : (
+                  <button className="btn primary" onClick={generate}>
+                    依課表產生整學期
+                  </button>
+                )}
               </div>
             ) : (
-              <div className="stack">
+              <div className="blocks">
+                {/* Above the first block as well as between them, so a note can
+                    be filed before week one without reordering anything. */}
+                <Inserter onPick={(k) => void insertAt(k, null)} label="在最前面加一個筆記區" />
                 {sessions.map((s) => {
                   const items = state?.plans.get(s.id) ?? []
                   const planDone = items.filter((i) => i.done).length
@@ -319,303 +325,127 @@ export function CoursePage() {
                       : planDone === items.length
                         ? 'done'
                         : 'doing'
+                  const meeting = isMeeting(s.kind)
                   return (
-                  <div key={s.id} className={`list-item wk-${planState}`}>
-                    <Link
-                      to={`/session/${s.id}`}
-                      className="grow"
-                      style={{ textDecoration: 'none', color: 'inherit' }}
-                    >
-                      <div className="title">
-                        第 {s.index} 週 · {SESSION_KIND_LABEL[s.kind ?? 'lecture']}
-                        {s.topic ? ` · ${s.topic}` : ''}
+                    <div key={s.id}>
+                      <div className={`block wk-${planState}`}>
+                        {/* The whole card is the link: the block is the note,
+                            and hunting for a small title to click is friction
+                            on the one thing this page is for. */}
+                        <Link to={`/session/${s.id}`} className="block-hit">
+                          <div className="block-main">
+                            <div className="block-title">
+                              第 {s.index} 週 · {SESSION_KIND_LABEL[s.kind ?? 'lecture']}
+                              {s.topic ? ` · ${s.topic}` : ''}
+                            </div>
+                            <div className="block-sub mono">
+                              {meeting
+                                ? `${s.date} 週${WEEKDAY_LABELS[new Date(`${s.date}T00:00:00`).getDay()]}${
+                                    s.start ? ` ${s.start}` : ''
+                                  }`
+                                : '筆記區'}
+                            </div>
+                          </div>
+                        </Link>
+
+                        <div className="block-tags">
+                          {s.canceled ? (
+                            <span className="tag warn">停課</span>
+                          ) : meeting ? (
+                            state?.transcribed.has(s.id) ? (
+                              <span className="tag ok">已轉錄</span>
+                            ) : (
+                              <span className="tag">未轉錄</span>
+                            )
+                          ) : null}
+                          {state?.noted.has(s.id) && <span className="tag ok">有筆記</span>}
+                          {!s.canceled && meeting && (
+                            <ProgressTag
+                              done={planDone}
+                              total={items.length}
+                              hoursLeft={planLeft}
+                              label="進度"
+                              emptyLabel="未排進度"
+                              tone={
+                                planState === 'done'
+                                  ? 'ok'
+                                  : planState === 'unplanned-past'
+                                    ? 'warn'
+                                    : undefined
+                              }
+                              title="本週進度"
+                            />
+                          )}
+                        </div>
+
+                        <div className="block-acts">
+                          {meeting && (
+                            <button
+                              className="btn ghost sm"
+                              onClick={() => db.sessions.update(s.id, { canceled: !s.canceled })}
+                            >
+                              {s.canceled ? '恢復' : '標記停課'}
+                            </button>
+                          )}
+                          <button
+                            className="btn danger sm"
+                            onClick={async () => {
+                              const go = await ask({
+                                title: `刪除${
+                                  meeting ? `${s.date} 的` : '這個'
+                                }${SESSION_KIND_LABEL[s.kind ?? 'lecture']}？`,
+                                danger: true,
+                                confirmLabel: meeting ? '刪除這個週次' : '刪除這個筆記區',
+                                body: meeting ? (
+                                  <>
+                                    會一起消失的：這一週的逐字稿、筆記、本週進度與講義。
+                                    <br />
+                                    只是想重新轉錄的話，到那一週的工作區用逐字稿旁的「⋯」，筆記會留著。
+                                  </>
+                                ) : (
+                                  '這個筆記區裡寫的東西會一起消失。'
+                                ),
+                              })
+                              if (go) {
+                                await deleteSessionCascade(s.id)
+                                await renumberSessions(courseId)
+                              }
+                            }}
+                          >
+                            刪除
+                          </button>
+                        </div>
                       </div>
-                      <div className="sub mono">
-                        {s.date} 週{WEEKDAY_LABELS[new Date(`${s.date}T00:00:00`).getDay()]}
-                      </div>
-                    </Link>
-                    {s.canceled ? (
-                      <span className="tag warn">停課</span>
-                    ) : state?.transcribed.has(s.id) ? (
-                      <span className="tag ok">已轉錄</span>
-                    ) : (
-                      <span className="tag">未轉錄</span>
-                    )}
-                    {state?.noted.has(s.id) && <span className="tag ok">有筆記</span>}
-                    {!s.canceled && (
-                      <ProgressTag
-                        done={planDone}
-                        total={items.length}
-                        hoursLeft={planLeft}
-                        label="進度"
-                        emptyLabel="未排進度"
-                        tone={
-                          planState === 'done' ? 'ok' : planState === 'unplanned-past' ? 'warn' : undefined
-                        }
-                        title="本週進度"
+                      <Inserter
+                        onPick={(k) => void insertAt(k, s.id)}
+                        label={`在第 ${s.index} 週後面加一個筆記區`}
                       />
-                    )}
-                    <button
-                      className="btn ghost sm"
-                      onClick={() => db.sessions.update(s.id, { canceled: !s.canceled })}
-                    >
-                      {s.canceled ? '恢復' : '標記停課'}
-                    </button>
-                    <button
-                      className="btn danger sm"
-                      onClick={async () => {
-                        const go = await ask({
-                          title: `刪除 ${s.date} 的${SESSION_KIND_LABEL[s.kind ?? 'lecture']}？`,
-                          danger: true,
-                          confirmLabel: '刪除這個週次',
-                          body: (
-                            <>
-                              會一起消失的：這一週的逐字稿、筆記、本週進度與講義。
-                              <br />
-                              只是想重新轉錄的話，到那一週的工作區用逐字稿旁的「⋯」，筆記會留著。
-                            </>
-                          ),
-                        })
-                        if (go) {
-                          await deleteSessionCascade(s.id)
-                          await renumberSessions(courseId)
-                        }
-                      }}
-                    >
-                      刪除
-                    </button>
-                  </div>
+                    </div>
                   )
                 })}
               </div>
             )}
-          </>
-        )}
+          </div>
 
-        {tab === 'setup' && (
-          <>
-            {/* ── recurring meetings ────────────────────────────── */}
-            <section className="card" style={{ marginBottom: '1.25rem' }}>
-              <h2>每週固定的上課時段</h2>
-              <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
-                只放<strong>每週都會發生</strong>的聚會。正課和分組討論各自每週開一個檔案——
-                兩場是分開的錄音，時間軸沒辦法合併，但同一週會共用同一個週次編號。
-                <br />
-                只開一次的分組討論不必寫在這裡，到「週次」用「新增聚會」挑日期就好。
-              </p>
-
-              {slots.length === 0 ? (
-                <div className="empty" style={{ padding: '1.25rem', marginBottom: '.9rem' }}>
-                  還沒有固定時段。
-                </div>
-              ) : (
-                <div className="stack" style={{ marginBottom: '.9rem' }}>
-                  {slots.map((slot, i) => (
-                    <div key={i} className="row slot-row" style={{ gap: '.5rem', alignItems: 'flex-end' }}>
-                      <div className="field" style={{ flex: '0 0 8rem', marginBottom: 0 }}>
-                        <label htmlFor={`kd-${i}`}>類型</label>
-                        <select
-                          id={`kd-${i}`}
-                          value={slot.kind ?? 'lecture'}
-                          onChange={(e) =>
-                            patchSlots(
-                              slots.map((sl, j) =>
-                                j === i ? { ...sl, kind: e.target.value as MeetingKind } : sl,
-                              ),
-                            )
-                          }
-                        >
-                          {MEETING_KINDS.map((k) => (
-                            <option key={k} value={k}>
-                              {MEETING_KIND_LABEL[k]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field" style={{ flex: '0 0 7rem', marginBottom: 0 }}>
-                        <label htmlFor={`wd-${i}`}>星期</label>
-                        <select
-                          id={`wd-${i}`}
-                          value={slot.weekday}
-                          onChange={(e) =>
-                            patchSlots(
-                              slots.map((s, j) =>
-                                j === i ? { ...s, weekday: Number(e.target.value) } : s,
-                              ),
-                            )
-                          }
-                        >
-                          {WEEKDAY_LABELS.map((label, wd) => (
-                            <option key={wd} value={wd}>
-                              週{label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <TimeField
-                        id={`st-${i}`}
-                        label="開始"
-                        value={slot.start}
-                        onChange={(v) =>
-                          patchSlots(slots.map((s, j) => (j === i ? { ...s, start: v } : s)))
-                        }
-                        style={{ flex: '1 1 6rem' }}
-                      />
-                      <TimeField
-                        id={`en-${i}`}
-                        label="結束"
-                        value={slot.end}
-                        onChange={(v) =>
-                          patchSlots(slots.map((s, j) => (j === i ? { ...s, end: v } : s)))
-                        }
-                        style={{ flex: '1 1 6rem' }}
-                      />
-                      <div className="field" style={{ flex: '1 1 7rem', marginBottom: 0 }}>
-                        <label htmlFor={`rm-${i}`}>教室</label>
-                        <BlurField
-                          id={`rm-${i}`}
-                          value={slot.room ?? ''}
-                          onCommit={(v) =>
-                            patchSlots(slots.map((s, j) => (j === i ? { ...s, room: v } : s)))
-                          }
-                        />
-                      </div>
-                      <button
-                        className="btn danger sm"
-                        style={{ flex: '0 0 auto' }}
-                        onClick={() => patchSlots(slots.filter((_, j) => j !== i))}
-                      >
-                        移除
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="row" style={{ gap: '.6rem' }}>
-                {/* The row that appears already carries a 類型 select, so a
-                    button per kind was two ways to reach the same row. */}
-                <button
-                  className="btn"
-                  style={{ flex: '0 0 auto' }}
-                  onClick={() =>
-                    patchSlots([
-                      ...slots,
-                      { weekday: 2, start: '19:00', end: '22:00', kind: 'lecture' },
-                    ])
-                  }
-                >
-                  新增時段
-                </button>
-                <button
-                  className="btn primary"
-                  style={{ flex: '0 0 auto' }}
-                  disabled={slots.length === 0}
-                  onClick={generate}
-                >
-                  依課表產生整學期
-                </button>
-              </div>
-            </section>
-
-            <WorkBlockEditor
-              courseId={courseId}
-              termWeeks={term?.weeks ?? 0}
-              defaultDate={term?.startDate ?? todayISO()}
-            />
-
-            {/* ── glossary ──────────────────────────────────────── */}
-            <section className="card" style={{ marginBottom: '1.25rem' }}>
-              <h2>專有名詞表</h2>
-              <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
-                這串會隨這門課的每次轉錄一起送給模型，讓它知道該怎麼寫這些字。
-                在逐字稿選取文字後也可以直接加進來。目前 {course.glossary.length} 個詞。
-              </p>
-              <GlossaryChips
-                terms={course.glossary}
-                onChange={(glossary) => void db.courses.update(courseId, { glossary })}
-                placeholder="加爾文、巴特、chesed…"
-                emptyText="還沒有這門課的專有名詞。"
-              />
-              <p className="small muted" style={{ marginTop: '.5rem' }}>
-                打完一個詞按 Enter 或頓號就成為一顆；點 × 移除。
-              </p>
-            </section>
-
-            <CorrectionsPanel courseId={courseId} />
-
-          </>
-        )}
-        {tab === 'require' && (
-          <>
-            <RequirementsPanel courseId={courseId} />
-            <AttachmentList
-              scope="course"
-              ownerId={courseId}
-              courseId={courseId}
-              kinds={['syllabus', 'reading', 'other']}
-              title="書目與課程檔案"
-              hint="教學大綱、指定書目、整學期共用的閱讀材料。PDF 會抽出文字，跨週搜尋找得到；閱讀清單裡的每一本書也可以指到這裡的檔案。"
-            />
-          </>
-        )}
-
-        {tab === 'work' && (
-          <>
-            <section style={{ marginBottom: '1.25rem' }}>
-              <div className="page-head" style={{ marginBottom: '.6rem' }}>
-                <div className="grow">
-                  <h2>這門課的作業</h2>
-                  <p className="small muted" style={{ margin: '.3rem 0 0' }}>
-                    依截止日排序。所有課程一起看在{' '}
-                    <Link to="/assignments">作業頁</Link>。
-                  </p>
-                </div>
-                <button
-                  className="btn primary"
-                  style={{ flex: '0 0 auto' }}
-                  onClick={() => setCreatingAssignment(true)}
-                >
-                  新增作業
-                </button>
-              </div>
-
-              {assignments === undefined ? (
-                <div className="empty">載入中…</div>
-              ) : dueList.length === 0 ? (
-                <div className="empty">
-                  <p>這門課還沒有作業。</p>
-                  <button className="btn primary" onClick={() => setCreatingAssignment(true)}>
-                    新增作業
-                  </button>
-                </div>
-              ) : (
-                <div className="stack">
-                  {dueList.map((a) => (
-                    <AssignmentCard
-                      key={a.id}
-                      assignment={a}
-                      course={course}
-                      blocks={workBlocks ?? []}
-                      open={openAssignment === a.id}
-                      onToggle={() =>
-                        setOpenAssignment(openAssignment === a.id ? null : a.id)
-                      }
-                      // Every row here is this course's; naming it each time
-                      // says nothing and pushes the date out of the line.
-                      showCourse={false}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-            <ReadingList courseId={courseId} />
-          </>
-        )}
+          {/* Everything that describes the course rather than a week in it.
+              Three dialogs, so the page itself stays the list of blocks. */}
+          <aside className="course-rail" aria-label="這門課的設定">
+            <button className="btn rail-btn" onClick={editCourse}>
+              編輯課程
+            </button>
+            <button className="btn rail-btn" onClick={() => setPanel('rules')}>
+              課程規定與作業
+            </button>
+            <button className="btn rail-btn" onClick={() => setPanel('files')}>
+              文件總覽
+            </button>
+          </aside>
+        </div>
       </main>
 
       {courseDraft && (
         <Modal
+          wide
           title="編輯課程"
           onClose={() => setCourseDraft(null)}
           onSubmit={async () => {
@@ -627,12 +457,90 @@ export function CoursePage() {
               teacher: courseDraft.teacher.trim(),
               code: courseDraft.code.trim(),
             })
+            // Renumbering is the generator's job, not the dialog's: changing a
+            // slot's weekday does not move the meetings already on the calendar.
             setCourseDraft(null)
           }}
           submitLabel="儲存"
           submitDisabled={!courseDraft.name.trim()}
         >
           <CourseForm value={courseDraft} onChange={setCourseDraft} showColor />
+
+          {/* Words the transcriber needs, kept with the course they belong to.
+              Written straight through rather than through the draft: the list
+              is its own record, and 取消 should not silently drop a word you
+              added while the dialog happened to be open. */}
+          <div className="field" style={{ marginTop: '1rem' }}>
+            <label>專有名詞表</label>
+            <div className="hint" style={{ marginTop: 0, marginBottom: '.5rem' }}>
+              {course.glossary.length === 0
+                ? '轉錄時連同這串一起送給模型，讓它知道該怎麼寫這些字。打完一個詞按 Enter 或頓號。'
+                : `${course.glossary.length} 個詞，會隨這門課的每次轉錄一起送出。`}
+            </div>
+            <GlossaryChips
+              terms={course.glossary}
+              onChange={(glossary) => void db.courses.update(courseId, { glossary })}
+              placeholder="加爾文、巴特、chesed…"
+              emptyText="還沒有這門課的專有名詞。"
+            />
+          </div>
+          <CorrectionsPanel courseId={courseId} />
+        </Modal>
+      )}
+
+      {panel === 'rules' && (
+        <Modal wide title="課程規定與作業" onClose={() => setPanel(null)} cancelLabel="關閉">
+          <RequirementsPanel courseId={courseId} />
+
+          <section className="card" style={{ marginBottom: '1.25rem' }}>
+            <div className="page-head" style={{ marginBottom: '.6rem' }}>
+              <div className="grow">
+                <h2>這門課的作業</h2>
+                <p className="small muted" style={{ margin: '.3rem 0 0' }}>
+                  依截止日排序。所有課程一起看在 <Link to="/assignments">作業頁</Link>。
+                </p>
+              </div>
+              <button
+                className="btn primary"
+                style={{ flex: '0 0 auto' }}
+                onClick={() => setCreatingAssignment(true)}
+              >
+                新增作業
+              </button>
+            </div>
+            {assignments === undefined ? (
+              <div className="empty">載入中…</div>
+            ) : dueList.length === 0 ? (
+              <div className="empty">這門課還沒有作業。</div>
+            ) : (
+              <div className="stack">
+                {dueList.map((a) => (
+                  <AssignmentCard
+                    key={a.id}
+                    assignment={a}
+                    course={course}
+                    blocks={workBlocks ?? []}
+                    open={openAssignment === a.id}
+                    onToggle={() => setOpenAssignment(openAssignment === a.id ? null : a.id)}
+                    showCourse={false}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <WorkBlockEditor
+            courseId={courseId}
+            termWeeks={term?.weeks ?? 0}
+            defaultDate={term?.startDate ?? todayISO()}
+          />
+          <ReadingList courseId={courseId} />
+        </Modal>
+      )}
+
+      {panel === 'files' && (
+        <Modal wide title="文件總覽" onClose={() => setPanel(null)} cancelLabel="關閉">
+          <FileOverview courseId={courseId} />
         </Modal>
       )}
 
@@ -662,7 +570,7 @@ export function CoursePage() {
             }
             setAdding(null)
           }}
-          title="新增聚會"
+          title="新增一堂課"
         />
       )}
     </>

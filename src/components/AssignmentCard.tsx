@@ -16,6 +16,7 @@ import type { Pressure } from '../schedule/workload'
 import { Modal } from './Modal'
 import { TimeField } from './TimeField'
 import { useConfirm } from './ConfirmProvider'
+import { NoteEditor } from './NoteEditor'
 
 const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
   done: { cls: 'ok', label: '已完成' },
@@ -169,13 +170,16 @@ function AssignmentDetail({
       </div>
 
       <div className="field">
-        <label htmlFor={`n-${assignment.id}`}>要求與備註</label>
-        <textarea
-          id={`n-${assignment.id}`}
-          rows={3}
+        <label>要求與備註</label>
+        <NoteEditor
+          initialValue={assignment.notes}
+          ariaLabel="要求與備註"
           placeholder="3000 字、Turabian 格式、至少五筆學術文獻"
-          defaultValue={assignment.notes}
-          onBlur={(e) => void updateAssignment(assignment.id, { notes: e.target.value })}
+          minHeight="6rem"
+          onCommit={(value) => {
+            if (value === assignment.notes) return
+            void updateAssignment(assignment.id, { notes: value })
+          }}
         />
       </div>
 
@@ -209,7 +213,7 @@ function AssignmentDetail({
         {needed > 0 ? (
           <>
             剩下的步驟預估需要 <strong>{needed} 小時</strong>，
-            到截止日為止這門課排了 <strong>{hoursAvailable} 小時</strong>作業時間。
+            到截止日為止，這門課排了 <strong>{hoursAvailable} 小時</strong>可以寫。
             {hoursAvailable < needed && (
               <span style={{ color: 'var(--danger)' }}>
                 {' '}
@@ -221,7 +225,7 @@ function AssignmentDetail({
         ) : (
           <>
             替步驟填上預估時數，就能知道到截止日為止的{' '}
-            <strong>{hoursAvailable} 小時</strong>作業時間夠不夠。
+            排出來的 <strong>{hoursAvailable} 小時</strong>夠不夠。
           </>
         )}
       </div>

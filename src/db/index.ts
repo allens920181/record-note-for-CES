@@ -2,7 +2,7 @@ import Dexie from 'dexie'
 import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
 import { deleteDir, deleteFile } from '../storage/fsRoot'
-import { DEFAULT_SETTINGS, FREE_TIER, MEETING_KINDS } from './schema'
+import { DEFAULT_SETTINGS, FREE_TIER, MEETING_KINDS, isMeeting } from './schema'
 import { hoursBetween } from '../lib/time'
 import { addDays, todayISO } from '../lib/dates'
 import { correctionKey, diffOnce, isMeaningful, suggestFrom } from '../schedule/corrections'
@@ -161,9 +161,16 @@ export async function createCourse(input: {
   code: string
   credits: number
   color: string
+  slots?: ClassSlot[]
 }): Promise<string> {
   const id = newId('course')
-  await db.courses.add({ ...input, id, slots: [], glossary: [], createdAt: Date.now() })
+  await db.courses.add({
+    ...input,
+    id,
+    slots: input.slots ?? [],
+    glossary: [],
+    createdAt: Date.now(),
+  })
   return id
 }
 
@@ -218,12 +225,59 @@ export async function sessionsInTerm(termId: string): Promise<number> {
 
 export async function updateCourse(
   courseId: string,
-  patch: Partial<Pick<Course, 'name' | 'teacher' | 'code' | 'credits' | 'color'>>,
+  patch: Partial<Pick<Course, 'name' | 'teacher' | 'code' | 'credits' | 'color' | 'slots'>>,
 ): Promise<void> {
   await db.courses.update(courseId, patch)
 }
 
 // ── sessions ──────────────────────────────────────────────────────────
+
+/**
+ * Adds a note block to a course at a chosen point in its ordered list.
+ *
+ * It borrows the date and week number of the block it follows, so it sorts into
+ * place and reads as belonging to that week. It carries no clock time: nothing
+ * happens at an hour, which is also why it never reaches the calendar.
+ */
+export async function insertNoteBlock(
+  courseId: string,
+  kind: SessionKind,
+  afterSessionId: string | null,
+): Promise<string> {
+  const ordered = await sessionsInOrder(courseId)
+  const at = afterSessionId ? ordered.findIndex((s) => s.id === afterSessionId) : -1
+  // Following nothing means going first, so borrow from what is currently first.
+  const above = at >= 0 ? ordered[at] : null
+  const below = ordered[at + 1] ?? null
+  const anchor = above ?? below
+  const seqOf = (s: Session) =>
+    s.seq ?? (isMeeting(s.kind) ? MEETING_KINDS.indexOf(s.kind ?? 'lecture') : NOTE_AFTER)
+  // Halfway between its neighbours, so it lands where it was dropped even when
+  // the two of them are a lecture and the discussion that follows it.
+  const seq = !above
+    ? (below ? seqOf(below) - 1 : 0)
+    : below && below.date === above.date
+      ? (seqOf(above) + seqOf(below)) / 2
+      : seqOf(above) + 1
+  // A meeting inserted this way still borrows its hour from the timetable when
+  // the course has one — a discussion that happens has a time; a note does not.
+  const course = isMeeting(kind) ? await db.courses.get(courseId) : undefined
+  const slot = course?.slots.find((sl) => (sl.kind ?? 'lecture') === kind) ?? course?.slots[0]
+  const id = newId('session')
+  await db.sessions.add({
+    id,
+    courseId,
+    index: anchor?.index ?? 1,
+    date: anchor?.date ?? todayISO(),
+    ...(slot ? { start: slot.start, end: slot.end, room: slot.room } : {}),
+    topic: '',
+    canceled: false,
+    kind,
+    seq,
+    createdAt: Date.now(),
+  })
+  return id
+}
 
 /**
  * Adds one more meeting to a course, a week on from the latest one. Useful for
@@ -255,6 +309,9 @@ export async function appendSession(
   })
   return id
 }
+
+/** Where a note block sits when it has no seq of its own: after the meetings. */
+const NOTE_AFTER = MEETING_KINDS.length
 
 export const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'] as const
 
@@ -300,7 +357,7 @@ export async function generateSessionsFromTimetable(courseId: string): Promise<G
   const course = await db.courses.get(courseId)
   if (!course) throw new Error('找不到這門課')
   if (course.slots.length === 0) {
-    throw new Error('這門課還沒設定每週固定的上課時段。單次的聚會請用「新增一次…」指定日期。')
+    throw new Error('這門課還沒設定每週固定的上課時段。只上一次的課請用「新增一堂課」指定日期。')
   }
   const term = await db.terms.get(course.termId)
   if (!term) throw new Error('找不到這門課所屬的學期')
@@ -793,9 +850,10 @@ export async function sessionsInOrder(courseId: string): Promise<Session[]> {
   // Kind order comes from MEETING_KINDS, not from the string: sorting the
   // labels alphabetically puts 'discussion' before 'lecture', so a week's
   // discussion would be listed above the class it follows.
-  const rank = (k?: MeetingKind) => MEETING_KINDS.indexOf(k ?? 'lecture')
+  const rank = (s: Session) =>
+    s.seq ?? (isMeeting(s.kind) ? MEETING_KINDS.indexOf(s.kind ?? 'lecture') : NOTE_AFTER)
   return list.sort(
-    (a, b) => a.date.localeCompare(b.date) || rank(a.kind) - rank(b.kind),
+    (a, b) => a.date.localeCompare(b.date) || rank(a) - rank(b) || a.createdAt - b.createdAt,
   )
 }
 

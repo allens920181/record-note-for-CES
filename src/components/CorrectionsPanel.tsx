@@ -39,19 +39,23 @@ export function CorrectionsPanel({ courseId }: Props) {
 
   const [custom, setCustom] = useState<Record<string, string>>({})
 
-  if (corrections === undefined) return null
+  if (corrections === undefined || learned === undefined) return null
+  // Nothing corrected yet means nothing to decide. An empty panel explaining a
+  // queue that does not exist is the kind of card that makes a page look busy
+  // while saying nothing; it appears the first time you fix a word.
+  if (rows.length === 0 && learned.length === 0) return null
 
   return (
     <section className="card" style={{ marginBottom: '1.25rem' }}>
-      <h2>轉錄修正</h2>
-      <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
-        你在逐字稿上改過的字會記在這裡。挑出真正的詞加進詞彙表，下次轉錄模型就知道怎麼寫。
-        <br />
-        英文與原文音譯（chesed、Barth）改兩次以上會自動加入；
-        中文沒有詞界可循，所以由你點一下決定——猜錯反而會教模型寫錯字。
-      </p>
+      <h2>逐字稿改過的字</h2>
+      {rows.length > 0 && (
+        <p className="small muted" style={{ margin: '.3rem 0 .9rem' }}>
+          挑出真正的詞加進詞彙表，下次轉錄模型就知道怎麼寫。
+          中文沒有詞界可循，所以由你點一下決定——猜錯反而會教模型寫錯字。
+        </p>
+      )}
 
-      {learned && learned.length > 0 && (
+      {learned.length > 0 && (
         <p className="small" style={{ margin: '0 0 .9rem', color: 'var(--accent-ink)' }}>
           已從修正學到 {learned.length} 個詞：
           {learned
@@ -61,11 +65,7 @@ export function CorrectionsPanel({ courseId }: Props) {
         </p>
       )}
 
-      {rows.length === 0 ? (
-        <div className="empty" style={{ padding: '1.25rem' }}>
-          目前沒有待處理的修正。
-        </div>
-      ) : (
+      {rows.length === 0 ? null : (
         <div className="stack">
           {rows.map(({ c, suggestion }) => (
             <div key={c.id} className="correction">
@@ -77,6 +77,7 @@ export function CorrectionsPanel({ courseId }: Props) {
               <div className="row" style={{ gap: '.35rem', marginTop: '.5rem', alignItems: 'center' }}>
                 {suggestion?.term ? (
                   <button
+                    type="button"
                     className="btn primary sm"
                     style={{ flex: '0 0 auto' }}
                     onClick={() => void resolveCorrection(c.id, suggestion.term!)}
@@ -86,6 +87,7 @@ export function CorrectionsPanel({ courseId }: Props) {
                 ) : (
                   (suggestion?.options ?? []).slice(0, MAX_CHIPS).map((option) => (
                     <button
+                      type="button"
                       key={option}
                       className="btn sm"
                       style={{ flex: '0 0 auto' }}
@@ -110,6 +112,7 @@ export function CorrectionsPanel({ courseId }: Props) {
                   }}
                 />
                 <button
+                  type="button"
                   className="btn ghost sm"
                   style={{ flex: '0 0 auto' }}
                   onClick={() => void dismissCorrection(c.id)}
