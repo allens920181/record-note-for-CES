@@ -81,14 +81,16 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     [termId],
   )
 
-  const [expanded, setExpanded] = useState<string[]>([])
-  // The course you are in opens itself; anything you opened by hand stays open.
+  // One at a time. A course is fifteen weeks — two of them expanded pushed
+  // every other course off the bottom of the rail, and moving between courses
+  // is what the rail is for.
+  const [expanded, setExpanded] = useState<string | null>(null)
   useEffect(() => {
-    if (hereCourse) setExpanded((prev) => (prev.includes(hereCourse) ? prev : [...prev, hereCourse]))
+    if (hereCourse) setExpanded(hereCourse)
   }, [hereCourse])
 
   const openIds = useMemo(
-    () => (courses ?? []).filter((c) => expanded.includes(c.id)).map((c) => c.id),
+    () => (courses ?? []).filter((c) => c.id === expanded).map((c) => c.id),
     [courses, expanded],
   )
   const weeks = useLiveQuery(async () => {
@@ -148,7 +150,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             </p>
           ) : (
             courses.map((course) => {
-              const isOpen = expanded.includes(course.id)
+              const isOpen = expanded === course.id
               const list = weeks?.get(course.id) ?? []
               return (
                 <div key={course.id} className="side-course">
@@ -157,13 +159,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                       className="side-twist"
                       aria-expanded={isOpen}
                       aria-label={`${isOpen ? '收合' : '展開'}「${course.name}」的週次`}
-                      onClick={() =>
-                        setExpanded((prev) =>
-                          prev.includes(course.id)
-                            ? prev.filter((id) => id !== course.id)
-                            : [...prev, course.id],
-                        )
-                      }
+                      onClick={() => setExpanded(isOpen ? null : course.id)}
                     >
                       {isOpen ? '▾' : '▸'}
                     </button>

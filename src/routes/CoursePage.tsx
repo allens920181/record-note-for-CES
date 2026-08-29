@@ -25,6 +25,7 @@ import { CourseForm } from '../components/CourseForm'
 import type { CourseDraft } from '../components/CourseForm'
 import { GlossaryChips } from '../components/GlossaryChips'
 import { ProgressTag } from '../components/ProgressTag'
+import { RowMenu } from '../components/RowMenu'
 import { TimeBlockDialog, createTimeBlock, makeDraft } from '../components/TimeBlockDialog'
 import type { TimeBlockDraft } from '../components/TimeBlockDialog'
 import { useConfirm } from '../components/ConfirmProvider'
@@ -371,41 +372,46 @@ export function CoursePage() {
                         </div>
 
                         <div className="block-acts">
-                          {meeting && (
-                            <button
-                              className="btn ghost sm"
-                              onClick={() => db.sessions.update(s.id, { canceled: !s.canceled })}
-                            >
-                              {s.canceled ? '恢復' : '標記停課'}
-                            </button>
-                          )}
-                          <button
-                            className="btn danger sm"
-                            onClick={async () => {
-                              const go = await ask({
-                                title: `刪除${
-                                  meeting ? `${s.date} 的` : '這個'
-                                }${SESSION_KIND_LABEL[s.kind ?? 'lecture']}？`,
+                          <RowMenu
+                            label={`第 ${s.index} 週`}
+                            actions={[
+                              ...(meeting
+                                ? [
+                                    {
+                                      label: s.canceled ? '取消停課' : '標記停課',
+                                      onSelect: () =>
+                                        void db.sessions.update(s.id, { canceled: !s.canceled }),
+                                    },
+                                  ]
+                                : []),
+                              {
+                                label: meeting ? '刪除這個週次' : '刪除這個筆記區',
                                 danger: true,
-                                confirmLabel: meeting ? '刪除這個週次' : '刪除這個筆記區',
-                                body: meeting ? (
-                                  <>
-                                    會一起消失的：這一週的逐字稿、筆記、本週進度與講義。
-                                    <br />
-                                    只是想重新轉錄的話，到那一週的工作區用逐字稿旁的「⋯」，筆記會留著。
-                                  </>
-                                ) : (
-                                  '這個筆記區裡寫的東西會一起消失。'
-                                ),
-                              })
-                              if (go) {
-                                await deleteSessionCascade(s.id)
-                                await renumberSessions(courseId)
-                              }
-                            }}
-                          >
-                            刪除
-                          </button>
+                                onSelect: async () => {
+                                  const go = await ask({
+                                    title: `刪除${
+                                      meeting ? `${s.date} 的` : '這個'
+                                    }${SESSION_KIND_LABEL[s.kind ?? 'lecture']}？`,
+                                    danger: true,
+                                    confirmLabel: meeting ? '刪除這個週次' : '刪除這個筆記區',
+                                    body: meeting ? (
+                                      <>
+                                        會一起消失的：這一週的逐字稿、筆記、本週進度與講義。
+                                        <br />
+                                        只是想重新轉錄的話，到那一週的工作區用逐字稿旁的「⋯」，筆記會留著。
+                                      </>
+                                    ) : (
+                                      '這個筆記區裡寫的東西會一起消失。'
+                                    ),
+                                  })
+                                  if (go) {
+                                    await deleteSessionCascade(s.id)
+                                    await renumberSessions(courseId)
+                                  }
+                                },
+                              },
+                            ]}
+                          />
                         </div>
                       </div>
                       <Inserter

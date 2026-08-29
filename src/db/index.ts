@@ -715,6 +715,9 @@ export async function courseProgress(courseId: string): Promise<CourseProgress> 
   const scribed = new Set(scribedKeys as string[])
 
   const weeks: WeekProgress[] = sessions
+    // Meetings only: a note block has no week plan to be behind on, and
+    // counting it made "還有 N 沒排" grow every time one was filed.
+    .filter((s) => isMeeting(s.kind))
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((s) => {
       const items = planBy.get(s.id)?.items ?? []

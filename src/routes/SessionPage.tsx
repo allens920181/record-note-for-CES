@@ -448,32 +448,24 @@ export function SessionPage() {
         {/* While `siblings` is still loading it is undefined, and saying "這是
             第一個" then would be asserting something not yet known — so the
             labels only appear once the answer is in. */}
-        <Link
-          className={`btn ghost sm step${siblings?.prev ? '' : ' is-off'}`}
-          to={siblings?.prev ? `/session/${siblings.prev.id}` : '#'}
-          aria-disabled={!siblings?.prev}
-          onClick={(e) => !siblings?.prev && e.preventDefault()}
-        >
-          ‹{' '}
-          {siblings === undefined
-            ? ''
-            : siblings.prev
-              ? `第 ${siblings.prev.index} 週 · ${SESSION_KIND_LABEL[siblings.prev.kind ?? 'lecture']}`
-              : '這是第一個'}
-        </Link>
-        <Link
-          className={`btn ghost sm step${siblings?.next ? '' : ' is-off'}`}
-          to={siblings?.next ? `/session/${siblings.next.id}` : '#'}
-          aria-disabled={!siblings?.next}
-          onClick={(e) => !siblings?.next && e.preventDefault()}
-        >
-          {siblings === undefined
-            ? ''
-            : siblings.next
-              ? `第 ${siblings.next.index} 週 · ${SESSION_KIND_LABEL[siblings.next.kind ?? 'lecture']}`
-              : '這是最後一個'}{' '}
-          ›
-        </Link>
+        {/* Nothing to go back to is a fact, not a disabled button: dressing it
+            as one invited a click that could never do anything. */}
+        {siblings?.prev ? (
+          <Link className="btn ghost sm step" to={`/session/${siblings.prev.id}`}>
+            ‹ 第 {siblings.prev.index} 週 ·{' '}
+            {SESSION_KIND_LABEL[siblings.prev.kind ?? 'lecture']}
+          </Link>
+        ) : (
+          siblings !== undefined && <span className="small muted step-end">這是第一個</span>
+        )}
+        {siblings?.next ? (
+          <Link className="btn ghost sm step" to={`/session/${siblings.next.id}`}>
+            第 {siblings.next.index} 週 ·{' '}
+            {SESSION_KIND_LABEL[siblings.next.kind ?? 'lecture']} ›
+          </Link>
+        ) : (
+          siblings !== undefined && <span className="small muted step-end">這是最後一個</span>
+        )}
       </TopBar>
 
       <div className="workspace">
@@ -738,7 +730,10 @@ export function SessionPage() {
               )}
             </div>
 
-            {hasTranscript && (
+            {/* Only when there is something to play. A transcript imported
+                without its audio used to get an empty 0:00 / 0:00 player
+                holding the foot of the pane and doing nothing. */}
+            {hasTranscript && (audioMissing || audioUrl) && (
               <div className="player">
                 {audioMissing ? (
                   <span className="small" style={{ color: 'var(--danger)' }}>
@@ -756,6 +751,13 @@ export function SessionPage() {
                     <span className="clock">{formatTime(currentTime)}</span>
                   </>
                 )}
+              </div>
+            )}
+            {hasTranscript && !audioMissing && !audioUrl && (
+              <div className="player">
+                <span className="small muted">
+                  這一週只有逐字稿，沒有音檔——時間戳按了不會跳。
+                </span>
               </div>
             )}
           </section>

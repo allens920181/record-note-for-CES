@@ -1,5 +1,5 @@
-import { createContext, useContext } from 'react'
-import { Link, Outlet } from 'react-router-dom'
+import { createContext, useContext, useEffect, useRef } from 'react'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Sidebar, useSidebarOpen } from './Sidebar'
 
@@ -79,6 +79,30 @@ export function PageShell({
 
 export function Layout() {
   const [open, setOpen] = useSidebarOpen()
+  const { pathname } = useLocation()
+
+  // The workspace is two panes of your own writing; a course tree beside it is
+  // 15rem of something you are not looking at. Collapsed on the way in, put
+  // back on the way out — and only on the way in, so opening it while you are
+  // in there survives stepping to the next week.
+  const inside = useRef(pathname.startsWith('/session/'))
+  const before = useRef(open)
+  useEffect(() => {
+    const now = pathname.startsWith('/session/')
+    if (now && !inside.current) {
+      before.current = open
+      setOpen(false)
+    } else if (!now && inside.current) {
+      // Only our own collapse is undone. Opening it by hand while in the
+      // workspace is a decision, and putting it back would overrule it.
+      if (!open) setOpen(before.current)
+    }
+    inside.current = now
+    // `open` is read, never depended on: reacting to it would re-collapse the
+    // sidebar the moment the reader opened it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+
   return (
     <SidebarToggle.Provider value={() => setOpen(!open)}>
       <div className={`app${open ? ' side-open' : ''}`}>

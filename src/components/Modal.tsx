@@ -54,7 +54,14 @@ export function Modal({
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
-        <h2>{title}</h2>
+        {/* In the title row, not only at the foot: a dialog holding four
+            cards put its 關閉 three screens down from where the reader is. */}
+        <div className="modal-head">
+          <h2>{title}</h2>
+          <button type="button" className="modal-x" aria-label="關閉" onClick={onClose}>
+            ✕
+          </button>
+        </div>
         {/* A form only when there is something to submit. Inside one, any
             button that forgets type="button" submits it — which closed this
             dialog every time a reader clicked something in a panel it hosts. */}

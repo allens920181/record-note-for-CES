@@ -239,7 +239,15 @@ a.list-item:hover { border-color: var(--accent); }
   max-height: 90vh; overflow-y: auto;
 }
 .modal.wide { width: min(46rem, 100%); }
-.modal h2 { margin-bottom: 1rem; }
+.modal-head { display: flex; align-items: flex-start; gap: .6rem; margin-bottom: 1rem; }
+.modal-head h2 { flex: 1 1 auto; margin: 0; }
+.modal-x {
+  flex: 0 0 auto; width: 1.9rem; height: 1.9rem; padding: 0; line-height: 1;
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  color: var(--muted); cursor: pointer; font-size: .9rem;
+}
+.modal-x:hover { border-color: var(--line); color: var(--ink); }
+.modal-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.2rem; }
 
 /* ── workspace: the two panes ────────────────────────────────────── */
@@ -658,6 +666,33 @@ a.list-item:hover { border-color: var(--accent); }
   .block-hit { flex: 1 0 100%; }
 }
 
+/* One button for the actions a row rarely needs. Kept small and quiet: 刪除
+   on thirty rows was a column of red down the page, and 標記停課 held a fixed
+   position all term for something used twice. */
+.row-menu { position: relative; flex: 0 0 auto; }
+.row-menu-btn {
+  width: 1.9rem; height: 1.9rem; padding: 0; line-height: 1;
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  color: var(--muted); cursor: pointer; font-size: 1rem;
+}
+.row-menu-btn:hover, .row-menu-btn[aria-expanded='true'] {
+  border-color: var(--line); color: var(--ink);
+}
+.row-menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row-menu-list {
+  position: absolute; z-index: 10; top: 2.1rem; right: 0; min-width: 9rem;
+  padding: .3rem; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 16px 40px -16px rgba(0,0,0,.5);
+}
+.row-menu-item {
+  display: block; width: 100%; text-align: left; padding: .4rem .55rem;
+  background: none; border: 0; border-radius: 6px; cursor: pointer;
+  color: inherit; font-size: .85rem; white-space: nowrap;
+}
+.row-menu-item:hover, .row-menu-item:focus-visible { background: var(--accent-wash); }
+.row-menu-item.is-danger { color: var(--danger); }
+
 /* The gap between two blocks is a place, so it is a control. Kept in the tree
    at all times — a plus that only appears on hover cannot be tabbed to. */
 .inserter { position: relative; display: flex; justify-content: center; height: 1.4rem; }
@@ -972,6 +1007,8 @@ input[type='time']:focus { outline: 2px solid var(--accent); outline-offset: -1p
 /* A link with nowhere to go: dimmed and inert, but still occupying its place so
    the toolbar does not shift as you move through a course. */
 .btn.is-off { opacity: .45; pointer-events: none; }
+/* The end of the line, stated rather than offered. */
+.step-end { flex: 0 0 auto; padding: 0 .5rem; white-space: nowrap; }
 
 /* ── confirmation ────────────────────────────────────────────────── */
 .btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }

@@ -53,7 +53,7 @@ export function ProgressOverview({ courseId }: Props) {
         <h2 style={{ margin: 0 }}>學習進度</h2>
         {plannedWeeks > 0 && (
           <span className={`tag${completedWeeks === plannedWeeks ? ' ok' : ''}`}>
-            {completedWeeks} / {plannedWeeks} 週完成
+            {completedWeeks} / {plannedWeeks} 堂完成
           </span>
         )}
       </div>
@@ -64,10 +64,13 @@ export function ProgressOverview({ courseId }: Props) {
         </p>
       ) : (
         <>
+          {/* 堂, not 週: a fifteen-week term has thirty of these once it has
+              a lecture and a discussion each week, and "還有 29 週沒排" in a
+              term that is fifteen weeks long reads as a mistake. */}
           <p className="small muted" style={{ margin: '.3rem 0 .7rem' }}>
-            已排進度的 {plannedWeeks} 週裡完成 {itemsDone} / {itemsTotal} 項
+            已排進度的 {plannedWeeks} 堂裡完成 {itemsDone} / {itemsTotal} 項
             {hoursLeft > 0 && ` · 未完成的部分估計還要 ${hoursLeft} 小時`}
-            {unplanned > 0 && ` · 還有 ${unplanned} 週沒排`}。
+            {unplanned > 0 && ` · 還有 ${unplanned} 堂沒排`}。
           </p>
           <div className="progress">
             <div style={{ width: `${pct}%`, background: 'var(--accent)' }} />
