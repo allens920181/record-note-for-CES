@@ -6,9 +6,9 @@
  * understands — Obsidian included, which is where these notes are headed.
  *
  * The stored colour is a literal hex so it means something outside this app.
- * Inside it, the editor maps a known hex back to a theme token instead of
- * painting the hex: a dark red on the dark theme's near-black background is
- * unreadable, and a note should not become unreadable when the lights go out.
+ * Inside it, the editor maps a known hex back to a palette token instead of
+ * painting the hex, so the five colours stay the five colours the rest of the
+ * page uses rather than five slightly different ones.
  */
 
 export interface Swatch {

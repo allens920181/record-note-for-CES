@@ -22,27 +22,12 @@
   --body: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   --radius: 8px;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --ground: #0d1413;
-    --surface: #141d1b;
-    --surface-2: #1a2523;
-    --ink: #e5ece9;
-    --ink-soft: #c0ccc8;
-    --muted: #8b9c97;
-    --line: #253330;
-    --line-strong: #354844;
-    --accent: #58bb9e;
-    --accent-ink: #8fd7c1;
-    --accent-wash: #16332b;
-    --danger: #e88c8c;
-    --danger-wash: #3a1d1d;
-    --warn: #dda84a;
-    --warn-wash: #35290f;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -16px rgba(0, 0, 0, 0.8);
-  }
+  /* One palette, always this one. Told to the browser as well as painted by
+     hand: without this the widgets it draws itself — date and time pickers,
+     select menus, the audio player, scrollbars — follow the operating system
+     and come out dark grey on a page that is not. */
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -482,7 +467,7 @@ select.only-spk { flex: 0 0 auto; width: auto; font-size: .74rem; padding: .15re
 
 /* Text colour and highlight. The markdown stores a literal hex so it still
    means something in Obsidian; in here the known ones are painted from the
-   theme instead, because a dark red on the dark theme is unreadable. */
+   palette tokens instead, so a note keeps reading as part of this page. */
 .cm-md-u { text-decoration: underline; text-underline-offset: .18em; }
 .cm-c-red   { color: var(--danger); }
 .cm-c-amber { color: var(--warn); }
@@ -496,13 +481,6 @@ select.only-spk { flex: 0 0 auto; width: auto; font-size: .74rem; padding: .15re
 .cm-hl-green  { background: var(--accent-wash); }
 .cm-hl-blue   { background: #D3E4F5; }
 .cm-hl-pink   { background: var(--danger-wash); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .cm-c-blue { color: #8FB8E0; }
-  :root:not([data-theme='light']) .cm-hl-blue { background: #1B3247; }
-}
-:root[data-theme='dark'] .cm-c-blue { color: #8FB8E0; }
-:root[data-theme='dark'] .cm-hl-blue { background: #1B3247; }
-
 .note-palette {
   position: absolute; top: 100%; left: 0; margin-top: .25rem;
   display: flex; flex-direction: column; gap: .3rem; padding: .45rem;

@@ -66,7 +66,7 @@
   規則是「工具列管字，`/` 選單管段落」
 - **底線與顏色寫成 inline HTML**（`<u>`、`<span style="color:…">`、`<mark style="background:…">`），
   因為 markdown 沒有這些語法。存的是 hex，Obsidian 那邊看得懂；
-  但在編輯器裡會對映成主題色——寫死的深紅在深色主題下會看不見
+  但在編輯器裡會對映成這個 app 的五個顏色，而不是各自畫各自的 hex
 - **快捷鍵印在指令旁邊**：`Ctrl+B` / `Ctrl+I` / `Ctrl+1~3` / `Alt+↑↓`（搬動整段）
   / `Alt+T`（插入時間戳）。按你這台電腦的鍵盤顯示——Mac 上是 `⌘⌥`，
   Windows 上就寫 `Ctrl`／`Alt`
