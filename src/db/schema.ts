@@ -94,6 +94,22 @@ export interface CourseRequirements {
 
 export const EMPTY_REQUIREMENTS: CourseRequirements = { grading: [], rules: '' }
 
+/**
+ * Whether a course has to be taken.
+ *
+ * Left unset rather than defaulted: a course you have not decided about, or
+ * one from a school that does not divide them this way, should not be labelled
+ * 選修 by the app's own guess.
+ */
+export type CourseKind = 'required' | 'elective'
+
+export const COURSE_KIND_LABEL: Record<CourseKind, string> = {
+  required: '必修',
+  elective: '選修',
+}
+
+export const COURSE_KINDS: CourseKind[] = ['required', 'elective']
+
 export interface Course {
   id: string
   termId: string
@@ -102,6 +118,9 @@ export interface Course {
   code: string
   credits: number
   color: string
+  /** 必修 or 選修. Absent on courses created before this existed, and on any
+      the reader has not said. */
+  kind?: CourseKind
   slots: ClassSlot[]
   /** Terms fed to the transcription model so it spells them right. */
   glossary: string[]

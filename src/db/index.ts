@@ -13,6 +13,7 @@ import type {
   ClassSlot,
   Correction,
   Course,
+  CourseKind,
   CourseRequirements,
   MeetingKind,
   PlanItem,
@@ -39,6 +40,7 @@ export type {
   ClassSlot,
   Correction,
   Course,
+  CourseKind,
   CourseRequirements,
   MeetingKind,
   PlanItem,
@@ -180,6 +182,7 @@ export async function createCourse(input: {
   code: string
   credits: number
   color: string
+  kind?: CourseKind
   slots?: ClassSlot[]
 }): Promise<string> {
   const id = newId('course')
@@ -243,7 +246,7 @@ export async function sessionsInTerm(termId: string): Promise<number> {
 
 export async function updateCourse(
   courseId: string,
-  patch: Partial<Pick<Course, 'name' | 'teacher' | 'code' | 'credits' | 'color' | 'slots'>>,
+  patch: Partial<Pick<Course, 'name' | 'teacher' | 'code' | 'credits' | 'color' | 'kind' | 'slots'>>,
 ): Promise<void> {
   await db.courses.update(courseId, patch)
 }

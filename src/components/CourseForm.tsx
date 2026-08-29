@@ -1,5 +1,11 @@
-import { COURSE_COLORS, MEETING_KINDS, MEETING_KIND_LABEL } from '../db/schema'
-import type { ClassSlot, MeetingKind } from '../db/schema'
+import {
+  COURSE_COLORS,
+  COURSE_KINDS,
+  COURSE_KIND_LABEL,
+  MEETING_KINDS,
+  MEETING_KIND_LABEL,
+} from '../db/schema'
+import type { ClassSlot, CourseKind, MeetingKind } from '../db/schema'
 import { WEEKDAY_LABELS } from '../db'
 import { TimeField } from './TimeField'
 
@@ -9,6 +15,8 @@ export interface CourseDraft {
   code: string
   credits: number
   color: string
+  /** 必修 / 選修, or '' for a course you have not said either way about. */
+  kind: CourseKind | ''
   /** When it meets, every week. As much a part of "which course is this" as
       its code — the page header prints it right beside the credits. */
   slots: ClassSlot[]
@@ -20,6 +28,7 @@ export const EMPTY_COURSE: CourseDraft = {
   code: '',
   credits: 3,
   color: COURSE_COLORS[0],
+  kind: '',
   slots: [],
 }
 
@@ -87,6 +96,23 @@ export function CourseForm({ value, onChange, showColor = false }: Props) {
             value={value.credits}
             onChange={(e) => set({ credits: Number(e.target.value) })}
           />
+        </div>
+        {/* Three options, not a checkbox: a course nobody has said anything
+            about is not the same as one marked 選修. */}
+        <div className="field">
+          <label htmlFor="c-kind">修別</label>
+          <select
+            id="c-kind"
+            value={value.kind}
+            onChange={(e) => set({ kind: e.target.value as CourseKind | '' })}
+          >
+            <option value="">未指定</option>
+            {COURSE_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {COURSE_KIND_LABEL[k]}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
       {/* ── when it meets ──────────────────────────────────────── */}

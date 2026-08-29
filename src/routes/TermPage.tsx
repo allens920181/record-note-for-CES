@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { createCourse, db, deleteCourseCascade, sessionsInTerm, updateCourse, updateTerm } from '../db'
-import { COURSE_COLORS } from '../db/schema'
+import { COURSE_COLORS, COURSE_KIND_LABEL } from '../db/schema'
 import { weeksBetween } from '../lib/dates'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { Modal } from '../components/Modal'
@@ -43,7 +43,15 @@ export function TermPage() {
     const name = draft.name.trim()
     if (!name) return
     if (editing) {
-      await updateCourse(editing, { ...draft, name, teacher: draft.teacher.trim(), code: draft.code.trim() })
+      await updateCourse(editing, {
+        ...draft,
+        name,
+        teacher: draft.teacher.trim(),
+        code: draft.code.trim(),
+        // '' is "not said", which is stored as no field at all rather than as
+        // an empty string that every reader would then have to know about.
+        kind: draft.kind || undefined,
+      })
       setNotice(`已更新「${name}」。`)
     } else {
       await createCourse({
@@ -52,6 +60,7 @@ export function TermPage() {
         teacher: draft.teacher.trim(),
         code: draft.code.trim(),
         credits: draft.credits,
+        kind: draft.kind || undefined,
         color: COURSE_COLORS[(courses?.length ?? 0) % COURSE_COLORS.length],
         // Said once, here: a new course used to be created without a time and
         // then need a second errand on another screen to acquire one.
@@ -62,6 +71,16 @@ export function TermPage() {
     setEditing(null)
     setCreating(false)
   }
+
+  /** Credits by 修別, counting only the courses that say which they are. */
+  const credits = (courses ?? []).reduce(
+    (sum, c) => {
+      if (c.kind === 'required') sum.required += c.credits
+      else if (c.kind === 'elective') sum.elective += c.credits
+      return sum
+    },
+    { required: 0, elective: 0 },
+  )
 
   async function submitTerm() {
     if (!termDraft || !termDraft.name.trim() || termDraft.endDate < termDraft.startDate) return
@@ -106,6 +125,21 @@ export function TermPage() {
             <h1>{term.name}</h1>
             <p>
               {term.startDate} 起 · {weeksBetween(term.startDate, term.endDate)} 週
+              {/* Nothing but the addition of what is on the list below — and
+                  the reason to mark a course 必修 in the first place. Absent
+                  until something has been marked, so it never reads as「這學期
+                  沒有必修」when the truth is that nobody has said yet. */}
+              {credits.required + credits.elective > 0 && (
+                <>
+                  {' · '}
+                  {[
+                    credits.required > 0 ? `必修 ${credits.required} 學分` : '',
+                    credits.elective > 0 ? `選修 ${credits.elective} 學分` : '',
+                  ]
+                    .filter(Boolean)
+                    .join('、')}
+                </>
+              )}
             </p>
           </div>
           <button
@@ -152,7 +186,14 @@ export function TermPage() {
                   className="grow"
                   style={{ textDecoration: 'none', color: 'inherit' }}
                 >
-                  <div className="title">{c.name}</div>
+                  <div className="title">
+                    {c.name}
+                    {c.kind && (
+                      <span className={`tag${c.kind === 'required' ? ' warn' : ''}`}>
+                        {COURSE_KIND_LABEL[c.kind]}
+                      </span>
+                    )}
+                  </div>
                   <div className="sub">
                     {[c.teacher, c.code, `${c.credits} 學分`].filter(Boolean).join(' · ')} ·{' '}
                     {sessionCounts?.[c.id] ?? 0} 個週次
@@ -191,6 +232,7 @@ export function TermPage() {
                       code: c.code,
                       credits: c.credits,
                       color: c.color,
+                      kind: c.kind ?? '',
                       slots: c.slots,
                     })
                     setEditing(c.id)

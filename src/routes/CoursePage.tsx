@@ -12,7 +12,7 @@ import {
   renumberSessions,
   todayISO,
 } from '../db'
-import { SESSION_KIND_LABEL, isMeeting } from '../db/schema'
+import { COURSE_KIND_LABEL, SESSION_KIND_LABEL, isMeeting } from '../db/schema'
 import type { SessionKind } from '../db/schema'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { ReadingList } from '../components/ReadingList'
@@ -221,6 +221,7 @@ export function CoursePage() {
       code: course.code,
       credits: course.credits,
       color: course.color,
+      kind: course.kind ?? '',
       slots: course.slots,
     })
   }
@@ -263,7 +264,14 @@ export function CoursePage() {
           <div className="grow">
             <h1>{course.name}</h1>
             <p>
-              {[course.teacher, course.code, `${course.credits} 學分`].filter(Boolean).join(' · ')}
+              {[
+                course.teacher,
+                course.code,
+                `${course.credits} 學分`,
+                course.kind ? COURSE_KIND_LABEL[course.kind] : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
               {slots.length > 0 &&
                 ` · ${slots
                   .map(
@@ -480,6 +488,8 @@ export function CoursePage() {
               name,
               teacher: courseDraft.teacher.trim(),
               code: courseDraft.code.trim(),
+              // '' means "not said" and is stored as no field at all.
+              kind: courseDraft.kind || undefined,
             })
             // Renumbering is the generator's job, not the dialog's: changing a
             // slot's weekday does not move the meetings already on the calendar.

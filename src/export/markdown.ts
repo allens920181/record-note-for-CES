@@ -1,5 +1,5 @@
 import { db } from '../db'
-import { SESSION_KIND_LABEL } from '../db/schema'
+import { COURSE_KIND_LABEL, SESSION_KIND_LABEL } from '../db/schema'
 import type { TranscriptSegment } from '../db/schema'
 import { ASSIGNMENT_STATUS_LABEL, READING_STATUS_LABEL } from '../db/schema'
 import { safeName, writeInto } from '../storage/fsRoot'
@@ -76,6 +76,9 @@ export async function exportTermMarkdown(
         teacher: course.teacher,
         code: course.code,
         credits: course.credits,
+        // Same key the week files use for 正課／分組討論: what sort of thing
+        // this is, in the words the reader picked.
+        kind: course.kind ? COURSE_KIND_LABEL[course.kind] : undefined,
         term: term.name,
       }) +
         `\n# ${course.name}\n\n` +
