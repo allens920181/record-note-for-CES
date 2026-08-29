@@ -284,10 +284,15 @@ a.list-item:hover { border-color: var(--accent); }
 .pane:last-child { border-right: 0; }
 .pane-head {
   display: flex; align-items: center; gap: .6rem;
+  /* The label is the one thing here that cannot be reached another way, so it
+     is trimmed rather than squeezed — a `flex: 1` span with CJK text in it
+     collapses into a one-character-wide column instead of shrinking. */
   padding: .5rem .9rem; border-bottom: 1px solid var(--line);
   background: var(--surface-2); font-size: .78rem; color: var(--muted);
   font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase;
 }
+.pane-head .grow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane-head .row-menu-btn { padding: .2rem .45rem; }
 .pane-body { flex: 1; overflow-y: auto; min-height: 0; }
 
 /* transcript */

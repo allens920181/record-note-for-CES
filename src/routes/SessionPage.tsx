@@ -25,6 +25,7 @@ import { keyLabel } from '../editor/keys'
 import { WeekPlanPanel } from '../components/WeekPlanPanel'
 import type { NoteEditorHandle } from '../components/NoteEditor'
 import { RecorderPanel } from '../components/RecorderPanel'
+import { RowMenu } from '../components/RowMenu'
 import { SpeakerPicker } from '../components/SpeakerPicker'
 import { looksLikeTurn, speakersIn, speakersOf } from '../lib/speakers'
 import { AttachmentList } from '../components/AttachmentList'
@@ -676,13 +677,27 @@ export function SessionPage() {
               </span>
               {hasTranscript && !showFiles && (
                 <>
-                  {/* Both of these work on what is selected in the transcript,
-                      and neither can while it is being edited: the selection
-                      then lives inside a textarea, and their preventDefault —
-                      there to keep the selection alive — would also stop the
-                      edit in progress from being committed on blur. */}
-                  {!editingTranscript && (
+                  {/* A mode you are in needs its way out on screen; the way in
+                      does not, and eight controls across one strip left the
+                      label itself nowhere to go. The rest live behind ⋯. */}
+                  {editingTranscript || markingSpeakers ? (
+                    <button
+                      className="btn ghost sm active"
+                      onClick={() => {
+                        setEditingTranscript(false)
+                        setMarkingSpeakers(false)
+                      }}
+                    >
+                      {editingTranscript ? '完成編輯' : '標完了'}
+                    </button>
+                  ) : (
                     <>
+                      {/* Both of these work on what is selected in the
+                          transcript, and neither can while it is being edited:
+                          the selection then lives inside a textarea, and their
+                          preventDefault — there to keep the selection alive —
+                          would also stop the edit in progress from being
+                          committed on blur. */}
                       <button
                         className="btn ghost sm"
                         onMouseDown={(e) => e.preventDefault()}
@@ -699,54 +714,47 @@ export function SessionPage() {
                       >
                         選取加入詞彙表
                       </button>
+                      {/* Only worth offering once there is a choice to make. */}
+                      {heard.length > 1 && (
+                        <select
+                          className="only-spk"
+                          aria-label="只看某個人講的"
+                          value={onlySpeaker}
+                          onChange={(e) => setOnlySpeaker(e.target.value)}
+                        >
+                          <option value="">全部的人</option>
+                          {heard.map((n) => (
+                            <option key={n} value={n}>
+                              只看 {n}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <RowMenu
+                        label="這份逐字稿"
+                        actions={[
+                          { label: '修正錯字', onSelect: () => setEditingTranscript(true) },
+                          { label: '標記說話者', onSelect: () => setMarkingSpeakers(true) },
+                          // Nothing to follow without audio.
+                          ...(audioUrl
+                            ? [
+                                {
+                                  label: follow ? '播放時不要自動捲動' : '播放時自動捲到這一句',
+                                  onSelect: () => setFollow((f) => !f),
+                                },
+                              ]
+                            : []),
+                          {
+                            label:
+                              recordings.length > 1
+                                ? `第 ${partNo} 段：重轉、換音檔、刪除…`
+                                : '重新轉錄、換音檔、刪除…',
+                            onSelect: () => setRedo('again'),
+                          },
+                        ]}
+                      />
                     </>
                   )}
-                  {/* Nothing to follow without audio. */}
-                  {audioUrl && (
-                    <button
-                      className="btn ghost sm"
-                      onClick={() => setFollow((f) => !f)}
-                      title="播放時自動捲到目前這一句"
-                    >
-                      {follow ? '跟播中' : '不跟播'}
-                    </button>
-                  )}
-                  <button className="btn ghost sm" onClick={() => setEditingTranscript((v) => !v)}>
-                    {editingTranscript ? '完成編輯' : '修正錯字'}
-                  </button>
-                  {!editingTranscript && (
-                    <button
-                      className={`btn ghost sm${markingSpeakers ? ' active' : ''}`}
-                      aria-pressed={markingSpeakers}
-                      title="標記誰在講話——轉錄服務不會分辨說話者，這裡是手動標的"
-                      onClick={() => setMarkingSpeakers((v) => !v)}
-                    >
-                      {markingSpeakers ? '標完了' : '標記說話者'}
-                    </button>
-                  )}
-                  {/* Only worth offering once there is a choice to make. */}
-                  {heard.length > 1 && !markingSpeakers && (
-                    <select
-                      className="only-spk"
-                      aria-label="只看某個人講的"
-                      value={onlySpeaker}
-                      onChange={(e) => setOnlySpeaker(e.target.value)}
-                    >
-                      <option value="">全部的人</option>
-                      {heard.map((n) => (
-                        <option key={n} value={n}>
-                          只看 {n}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <button
-                    className="btn ghost sm"
-                    title="重新轉錄、換音檔，或刪掉這份逐字稿"
-                    onClick={() => setRedo('again')}
-                  >
-                    ⋯
-                  </button>
                 </>
               )}
               {/* Handouts stay reachable after transcription — the slides often
