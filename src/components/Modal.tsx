@@ -42,7 +42,10 @@ export function Modal({
 }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // Not if something inside already used it: Escape dismisses the note
+      // editor's `/` menu, and closing the whole dialog underneath it loses
+      // everything the reader was in the middle of.
+      if (e.key === 'Escape' && !e.defaultPrevented) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, saveRequirements } from '../db'
 import { EMPTY_REQUIREMENTS } from '../db/schema'
+import { NoteEditor } from './NoteEditor'
 
 interface Props {
   courseId: string
@@ -64,20 +65,19 @@ export function RequirementsPanel({ courseId }: Props) {
           報告幾頁、引註用什麼格式、遲交怎麼算——不必為了一句話再去開一次 PDF。
         </p>
       )}
-      <textarea
-        id={`req-${courseId}`}
-        rows={10}
-        aria-label="課堂要求"
+      {/* The same editor as the week notes: `/` for a heading or a list, the
+          selection toolbar for a colour. A grading rule you can read at a
+          glance beats one buried in a paragraph of plain text. */}
+      {/* Not keyed on the stored text: this editor owns it while you are in
+          the box, and remounting on every save would drop the cursor. */}
+      <NoteEditor
+        initialValue={requirements.rules}
+        ariaLabel="課堂要求"
         placeholder={PLACEHOLDER}
-        // Keyed on the saved text so a value written elsewhere (or the legacy
-        // fold-in above) shows up, while typing is never interrupted.
-        key={requirements.rules}
-        defaultValue={requirements.rules}
-        onBlur={(e) => {
-          if (e.target.value === requirements.rules) return
-          void saveRequirements(courseId, { grading: [], rules: e.target.value }).then(() =>
-            setSaved(true),
-          )
+        minHeight="14rem"
+        onCommit={(value) => {
+          if (value === requirements.rules) return
+          void saveRequirements(courseId, { grading: [], rules: value }).then(() => setSaved(true))
         }}
       />
       <div className="hint">離開輸入框就會存檔。這段也會一起匯出到 Markdown。</div>

@@ -6,6 +6,7 @@ import type { Attachment } from '../db/schema'
 import { READING_STATUS_LABEL } from '../db/schema'
 import type { ReadingStatus } from '../db/schema'
 import { addAttachment, readAttachment, removeAttachment } from '../files/attachments'
+import { NoteEditor } from './NoteEditor'
 import { formatBytes } from '../lib/time'
 import { BlurField } from './BlurField'
 import { PdfViewer } from './PdfViewer'
@@ -285,12 +286,16 @@ export function ReadingList({ courseId }: Props) {
                     </div>
 
                     <div className="field">
-                      <label htmlFor={`rnotes-${r.id}`}>讀書筆記</label>
-                      <textarea
-                        id={`rnotes-${r.id}`}
-                        rows={3}
-                        defaultValue={r.notes}
-                        onBlur={(e) => void updateReading(r.id, { notes: e.target.value })}
+                      <label>讀書筆記</label>
+                      <NoteEditor
+                        initialValue={r.notes}
+                        ariaLabel="讀書筆記"
+                        placeholder="讀到什麼、和哪一週的課有關、想追問什麼"
+                        minHeight="6rem"
+                        onCommit={(value) => {
+                          if (value === r.notes) return
+                          void updateReading(r.id, { notes: value })
+                        }}
                       />
                     </div>
 

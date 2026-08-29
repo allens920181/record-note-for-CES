@@ -373,6 +373,15 @@ a.list-item:hover { border-color: var(--accent); }
 .note-wrap { position: relative; height: 100%; }
 .note-host { height: 100%; }
 
+/* The same editor used as a field: it needs the frame a textarea had, and a
+   floor to stand on rather than the full height of a pane it is not in. */
+.note-wrap.as-field {
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-2); padding: .5rem .7rem;
+}
+.note-wrap.as-field:focus-within { border-color: var(--accent); }
+.note-wrap.as-field .note-host { height: auto; min-height: inherit; }
+
 /* Sits above the selection and follows it. Absolute inside the pane so it
    scrolls away with the text rather than hovering over unrelated lines. */
 .note-bar {
