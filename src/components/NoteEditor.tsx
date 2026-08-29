@@ -212,9 +212,12 @@ export function NoteEditor({
     if (!host.current) return
     // A live proxy, so a command reads the playback position at the moment it
     // runs rather than the one captured when the editor was created.
+    // Read through the ref every time: the editor is built once, and a context
+    // captured here would freeze on the first render's callbacks.
     const ctx: NoteContext = {
       now: () => cbs.current.context.now(),
       transcriptQuote: () => cbs.current.context.transcriptQuote(),
+      attachFile: () => cbs.current.context.attachFile?.() ?? Promise.resolve(null),
     }
 
     const v = new EditorView({

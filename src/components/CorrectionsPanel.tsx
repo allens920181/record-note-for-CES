@@ -77,6 +77,7 @@ export function CorrectionsPanel({ courseId }: Props) {
               <div className="row" style={{ gap: '.35rem', marginTop: '.5rem', alignItems: 'center' }}>
                 {suggestion?.term ? (
                   <button
+                    type="button"
                     className="btn primary sm"
                     style={{ flex: '0 0 auto' }}
                     onClick={() => void resolveCorrection(c.id, suggestion.term!)}
@@ -86,6 +87,7 @@ export function CorrectionsPanel({ courseId }: Props) {
                 ) : (
                   (suggestion?.options ?? []).slice(0, MAX_CHIPS).map((option) => (
                     <button
+                      type="button"
                       key={option}
                       className="btn sm"
                       style={{ flex: '0 0 auto' }}
@@ -110,6 +112,7 @@ export function CorrectionsPanel({ courseId }: Props) {
                   }}
                 />
                 <button
+                  type="button"
                   className="btn ghost sm"
                   style={{ flex: '0 0 auto' }}
                   onClick={() => void dismissCorrection(c.id)}

@@ -15,6 +15,20 @@ interface Props {
   children: ReactNode
 }
 
+function Body({ onSubmit, children }: { onSubmit?: () => void; children: ReactNode }) {
+  if (!onSubmit) return <div>{children}</div>
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSubmit()
+      }}
+    >
+      {children}
+    </form>
+  )
+}
+
 export function Modal({
   title,
   onClose,
@@ -38,12 +52,10 @@ export function Modal({
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <h2>{title}</h2>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            onSubmit?.()
-          }}
-        >
+        {/* A form only when there is something to submit. Inside one, any
+            button that forgets type="button" submits it — which closed this
+            dialog every time a reader clicked something in a panel it hosts. */}
+        <Body onSubmit={onSubmit}>
           {children}
           <div className="modal-actions">
             <button type="button" className="btn ghost" onClick={onClose}>
@@ -60,7 +72,7 @@ export function Modal({
               </button>
             )}
           </div>
-        </form>
+        </Body>
       </div>
     </div>
   )

@@ -27,6 +27,11 @@ export interface NoteContext {
   now: () => number | null
   /** The reader's selection in the transcript, if any. */
   transcriptQuote: () => { text: string; seconds: number } | null
+  /**
+   * Picks a file, stores it against this block, and reports where it landed —
+   * or null when the reader changed their mind or there was nowhere to put it.
+   */
+  attachFile?: () => Promise<{ fileName: string; storageKey: string } | null>
 }
 
 export interface NoteCommand {
@@ -403,6 +408,31 @@ export const NOTE_COMMANDS: NoteCommand[] = [
       run: (v) => insertMark(v, kind),
     }),
   ),
+  {
+    id: 'file',
+    label: '檔案',
+    hint: '挑一份講義或資料，會存進這一週',
+    group: '課堂',
+    keywords: 'file 檔案 附件 attachment pdf 文件 講義 upload 上傳',
+    enabled: (ctx) => Boolean(ctx.attachFile),
+    run: (v, ctx) => {
+      if (!ctx.attachFile) return
+      // The picker is asynchronous, so the text goes in when it comes back —
+      // at wherever the caret is by then, which is where the reader is looking.
+      void ctx.attachFile().then((added) => {
+        if (!added) return
+        // A path rather than an app-only id: the exported markdown still points
+        // at the file, and 文件總覽 finds it by the same key.
+        const link = `[📎 ${added.fileName}](${added.storageKey})`
+        const { from, to } = v.state.selection.main
+        v.dispatch({
+          changes: { from, to, insert: link },
+          selection: { anchor: from + link.length },
+        })
+        v.focus()
+      })
+    },
+  },
   {
     id: 'stamp',
     shortcut: 'Alt-t',

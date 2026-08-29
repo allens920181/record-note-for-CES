@@ -106,8 +106,31 @@ export interface Course {
 }
 
 /** A session is always a meeting; study time never becomes one. */
-export type SessionKind = MeetingKind
-export const SESSION_KIND_LABEL = MEETING_KIND_LABEL
+/**
+ * A block that holds notes but is not a meeting: a discussion write-up you keep
+ * beside the week it belongs to, a log of how an assignment went. They carry no
+ * clock time and never reach the calendar — nothing happens at a given hour.
+ */
+export type NoteKind = 'log' | 'memo'
+
+export const NOTE_KIND_LABEL: Record<NoteKind, string> = {
+  log: '作業紀錄',
+  memo: '其他筆記',
+}
+
+export const NOTE_KINDS: NoteKind[] = ['log', 'memo']
+
+export type SessionKind = MeetingKind | NoteKind
+
+/** Whether a session is a meeting — the calendar and the recorder only want those. */
+export function isMeeting(kind: SessionKind | undefined): kind is MeetingKind {
+  return kind === undefined || kind === 'lecture' || kind === 'discussion'
+}
+
+export const SESSION_KIND_LABEL: Record<SessionKind, string> = {
+  ...MEETING_KIND_LABEL,
+  ...NOTE_KIND_LABEL,
+}
 
 export interface Session {
   id: string
@@ -127,6 +150,13 @@ export interface Session {
   canceled: boolean
   /** Absent on sessions created before kinds existed; treat those as lectures. */
   kind?: SessionKind
+  /**
+   * Where this block sits among the others sharing its date. Absent on
+   * meetings, which fall back to the order their kinds are declared in — so a
+   * block inserted between a lecture (0) and its discussion (1) takes 0.5 and
+   * lands exactly where it was dropped, with nothing to migrate.
+   */
+  seq?: number
   createdAt: number
 }
 
