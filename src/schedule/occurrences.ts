@@ -1,8 +1,8 @@
-import type { Assignment, Course, Session, WorkBlock } from '../db'
+import type { Assignment, Course, Session } from '../db'
 import { MEETING_KIND_LABEL, isMeeting } from '../db/schema'
-import { addDays, minutesOf, weekdayOf } from '../lib/dates'
+import { minutesOf } from '../lib/dates'
 
-export type ItemKind = 'lecture' | 'discussion' | 'work' | 'deadline'
+export type ItemKind = 'lecture' | 'discussion' | 'deadline'
 
 export interface CalendarItem {
   /** Stable per occurrence, so React keys survive a re-expand. */
@@ -18,9 +18,8 @@ export interface CalendarItem {
   title: string
   detail?: string
   canceled?: boolean
-  /** Meetings open their workspace; study blocks have no page of their own. */
+  /** Meetings open their workspace; a deadline goes to its assignment. */
   sessionId?: string
-  workBlockId?: string
   assignmentId?: string
 }
 
@@ -29,7 +28,6 @@ export interface ExpandInput {
   to: string
   courses: Course[]
   sessions: Session[]
-  workBlocks: WorkBlock[]
   assignments?: Assignment[]
 }
 
@@ -45,7 +43,6 @@ export function expandOccurrences({
   to,
   courses,
   sessions,
-  workBlocks,
   assignments = [],
 }: ExpandInput): CalendarItem[] {
   const byId = new Map(courses.map((c) => [c.id, c]))
@@ -73,35 +70,6 @@ export function expandOccurrences({
       canceled: session.canceled,
       sessionId: session.id,
     })
-  }
-
-  for (const block of workBlocks) {
-    const course = byId.get(block.courseId)
-    if (!course) continue
-    const base = {
-      kind: 'work' as const,
-      courseId: course.id,
-      courseName: course.name,
-      color: course.color,
-      startMin: minutesOf(block.start),
-      endMin: minutesOf(block.end),
-      title: `${course.name} · 寫作業`,
-      detail: block.note,
-      workBlockId: block.id,
-    }
-
-    if (block.repeat === 'once') {
-      if (block.date && block.date >= from && block.date <= to) {
-        items.push({ ...base, key: `w:${block.id}`, date: block.date })
-      }
-      continue
-    }
-
-    if (block.weekday === undefined) continue
-    for (let date = from; date <= to; date = addDays(date, 1)) {
-      if (weekdayOf(date) !== block.weekday) continue
-      items.push({ ...base, key: `w:${block.id}:${date}`, date })
-    }
   }
 
   for (const assignment of assignments) {

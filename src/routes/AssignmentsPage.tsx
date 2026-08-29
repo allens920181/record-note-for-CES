@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import type { WorkBlock } from '../db'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { TermPicker, useTermChoice } from '../components/TermPicker'
 import { AssignmentCard, NewAssignmentDialog } from '../components/AssignmentCard'
@@ -37,20 +36,6 @@ export function AssignmentsPage() {
       courseIds.length ? db.assignments.where('courseId').anyOf(courseIds).toArray() : [],
     [courseIds.join(',')],
   )
-  const workBlocks = useLiveQuery(
-    async () => (courseIds.length ? db.workBlocks.where('courseId').anyOf(courseIds).toArray() : []),
-    [courseIds.join(',')],
-  )
-
-  const blocksByCourse = useMemo(() => {
-    const map = new Map<string, WorkBlock[]>()
-    for (const b of workBlocks ?? []) {
-      const list = map.get(b.courseId)
-      if (list) list.push(b)
-      else map.set(b.courseId, [b])
-    }
-    return map
-  }, [workBlocks])
 
   const courseById = useMemo(() => new Map((courses ?? []).map((c) => [c.id, c])), [courses])
 
@@ -72,10 +57,7 @@ export function AssignmentsPage() {
         <div className="page-head">
           <div className="grow">
             <h1>作業</h1>
-            <p>
-              依截止日排序。「時間夠不夠」是拿子任務的預估時數，
-              對照到截止日為止，你真正排了多少寫作業的時段算出來的。
-            </p>
+            <p>依截止日排序。拆解步驟並填上預估時數，就看得出還要多久。</p>
           </div>
           <TermPicker termId={termId} terms={terms} onChange={setTermId} id="a-term" />
           {(courses?.length ?? 0) > 1 && (
@@ -166,7 +148,6 @@ export function AssignmentsPage() {
                 key={a.id}
                 assignment={a}
                 course={courseById.get(a.courseId)}
-                blocks={blocksByCourse.get(a.courseId) ?? []}
                 open={open === a.id}
                 onToggle={() => setOpen(open === a.id ? null : a.id)}
               />

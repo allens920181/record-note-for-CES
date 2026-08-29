@@ -10,13 +10,11 @@ import {
   generateSessionsFromTimetable,
   insertNoteBlock,
   renumberSessions,
-  sumWorkHours,
   todayISO,
 } from '../db'
 import { SESSION_KIND_LABEL, isMeeting } from '../db/schema'
 import type { SessionKind } from '../db/schema'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
-import { WorkBlockEditor } from '../components/WorkBlockEditor'
 import { ReadingList } from '../components/ReadingList'
 import { CorrectionsPanel } from '../components/CorrectionsPanel'
 import { FileOverview } from '../components/FileOverview'
@@ -84,7 +82,7 @@ export function CoursePage() {
   const { courseId = '' } = useParams()
   // In the URL, not in state: a link can point at a specific tab, the back
   // button returns to the one you were on, and the calendar can send you
-  // straight to 作業時間 instead of dropping you on 週次 with no sign of it.
+  // straight to the dialog holding the thing that was clicked.
   const [params, setParams] = useSearchParams()
   // In the URL so a link can open a dialog, the back button closes it, and the
   // calendar can point straight at the study time inside 課程規定與作業.
@@ -119,10 +117,6 @@ export function CoursePage() {
   // sorting on the shared number leaves their order to chance. Shared with the
   // workspace's previous/next buttons so the two cannot disagree.
   const sessions = useLiveQuery(() => sessionsInOrder(courseId), [courseId])
-  const workBlocks = useLiveQuery(
-    () => db.workBlocks.where('courseId').equals(courseId).toArray(),
-    [courseId],
-  )
   const assignments = useLiveQuery(
     () => db.assignments.where('courseId').equals(courseId).toArray(),
     [courseId],
@@ -171,7 +165,6 @@ export function CoursePage() {
     )
 
   const slots = course.slots
-  const hours = sumWorkHours(workBlocks ?? [], term?.weeks ?? 0)
   const today = todayISO()
 
   async function generate() {
@@ -252,7 +245,6 @@ export function CoursePage() {
                       }`,
                   )
                   .join('、')}`}
-              {hours.total > 0 && ` · 寫作業時段共 ${hours.total} 小時`}
             </p>
           </div>
         </div>
@@ -519,7 +511,6 @@ export function CoursePage() {
                     key={a.id}
                     assignment={a}
                     course={course}
-                    blocks={workBlocks ?? []}
                     open={openAssignment === a.id}
                     onToggle={() => setOpenAssignment(openAssignment === a.id ? null : a.id)}
                     showCourse={false}
@@ -529,11 +520,6 @@ export function CoursePage() {
             )}
           </section>
 
-          <WorkBlockEditor
-            courseId={courseId}
-            termWeeks={term?.weeks ?? 0}
-            defaultDate={term?.startDate ?? todayISO()}
-          />
           <ReadingList courseId={courseId} />
         </Modal>
       )}

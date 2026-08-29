@@ -3,7 +3,6 @@ import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
 import { deleteDir, deleteFile } from '../storage/fsRoot'
 import { DEFAULT_SETTINGS, FREE_TIER, MEETING_KINDS, isMeeting } from './schema'
-import { hoursBetween } from '../lib/time'
 import { addDays, todayISO } from '../lib/dates'
 import { correctionKey, diffOnce, isMeaningful, suggestFrom } from '../schedule/corrections'
 import type {
@@ -30,7 +29,6 @@ import type {
   Transcript,
   UsageEntry,
   WeekPlan,
-  WorkBlock,
 } from './schema'
 
 export type {
@@ -57,7 +55,6 @@ export type {
   Transcript,
   UsageEntry,
   WeekPlan,
-  WorkBlock,
 }
 
 class NotesDB extends Dexie {
@@ -71,7 +68,6 @@ class NotesDB extends Dexie {
   settings!: EntityTable<AppSettings, 'id'>
   attachments!: EntityTable<Attachment, 'id'>
   drafts!: EntityTable<RecordingDraft, 'id'>
-  workBlocks!: EntityTable<WorkBlock, 'id'>
   assignments!: EntityTable<Assignment, 'id'>
   readings!: EntityTable<Reading, 'id'>
   corrections!: EntityTable<Correction, 'id'>
@@ -95,10 +91,8 @@ class NotesDB extends Dexie {
       attachments: 'id, scope, ownerId, courseId, createdAt',
       drafts: 'id, sessionId, updatedAt',
     })
-    // v3 adds the store that study time moved into. The data move itself runs at
-    // startup rather than here: a versioned upgrade only fires on the exact
-    // version transition, which makes it both untestable and unrecoverable if it
-    // is ever missed. See migrateLegacyWorkSlots.
+    // v3 added the store study time moved into; v7 removes it again. The
+    // version stays so an existing database still upgrades in order.
     this.version(3).stores({ workBlocks: 'id, courseId, repeat, date' })
     this.version(4).stores({
       assignments: 'id, courseId, due, status',
@@ -113,6 +107,11 @@ class NotesDB extends Dexie {
     // reads as "not filled in yet", which is the right default for a course
     // created before the field existed.
     this.version(6).stores({ weekPlans: 'id, sessionId, courseId' })
+    // v7 drops study time. It was a block of hours that produced nothing — its
+    // only job was to answer "how many hours before this is due", and that
+    // question is now left to the reader rather than to a table. Setting the
+    // store to null deletes it; restoring an older backup simply skips it.
+    this.version(7).stores({ workBlocks: null })
   }
 }
 
@@ -177,7 +176,6 @@ export async function createCourse(input: {
 export async function deleteCourseCascade(courseId: string): Promise<void> {
   const sessions = await db.sessions.where('courseId').equals(courseId).toArray()
   await Promise.all(sessions.map((s) => deleteSessionCascade(s.id)))
-  await db.workBlocks.where('courseId').equals(courseId).delete()
   await db.assignments.where('courseId').equals(courseId).delete()
   await db.corrections.where('courseId').equals(courseId).delete()
   await db.readings.where('courseId').equals(courseId).delete()
@@ -620,95 +618,6 @@ export async function updateReading(id: string, patch: Partial<Reading>): Promis
 
 export async function deleteReading(id: string): Promise<void> {
   await db.readings.delete(id)
-}
-
-// ── study time ────────────────────────────────────────────────────────
-
-/**
- * Study time was briefly a slot kind. Any left in a course's timetable is moved
- * into its own store here.
- *
- * This runs at startup rather than inside a Dexie upgrade because an upgrade
- * fires only on one exact version transition — if it is missed, the stale rows
- * stay for ever, and a leftover work slot would be expanded as if it were a
- * lecture. Courses are few, so re-checking costs nothing.
- */
-export async function migrateLegacyWorkSlots(): Promise<number> {
-  // One transaction for the read and both writes. Without it, two concurrent
-  // calls — React's StrictMode double-invoke, or a second tab — would each see
-  // the uncleaned course and each add a duplicate block. Dexie serialises
-  // transactions, so the second run reads the cleaned course and does nothing.
-  return db.transaction('rw', db.courses, db.workBlocks, async () => {
-    const courses = await db.courses.toArray()
-    let moved = 0
-    for (const course of courses) {
-      const slots: Array<Omit<ClassSlot, 'kind'> & { kind?: string }> = course.slots ?? []
-      const legacy = slots.filter((slot) => slot.kind === 'work')
-      if (legacy.length === 0) continue
-      await db.workBlocks.bulkAdd(
-        legacy.map((slot) => ({
-          id: newId('work'),
-          courseId: course.id,
-          repeat: 'weekly' as const,
-          weekday: slot.weekday,
-          start: slot.start,
-          end: slot.end,
-          createdAt: Date.now(),
-        })),
-      )
-      await db.courses.update(course.id, {
-        slots: slots.filter((slot) => slot.kind !== 'work') as ClassSlot[],
-      })
-      moved += legacy.length
-    }
-    return moved
-  })
-}
-
-export async function addWorkBlock(
-  input: Omit<WorkBlock, 'id' | 'createdAt'>,
-): Promise<string> {
-  const id = newId('work')
-  await db.workBlocks.add({ ...input, id, createdAt: Date.now() })
-  return id
-}
-
-export async function updateWorkBlock(id: string, patch: Partial<WorkBlock>): Promise<void> {
-  await db.workBlocks.update(id, patch)
-}
-
-export async function deleteWorkBlock(id: string): Promise<void> {
-  await db.workBlocks.delete(id)
-}
-
-export interface WorkHours {
-  /** Hours from blocks that repeat every week. */
-  weekly: number
-  /** Hours from blocks set aside for one particular day. */
-  oneOff: number
-  /** What the weekly blocks add up to across the whole term, plus the one-offs. */
-  total: number
-}
-
-/**
- * Adds up study time for a course. The planner in Phase 3 works from this to
- * answer "how many hours are actually left before this is due" — which is the
- * only number that matters once several deadlines land in the same fortnight.
- */
-export function sumWorkHours(blocks: WorkBlock[], termWeeks: number): WorkHours {
-  let weekly = 0
-  let oneOff = 0
-  for (const block of blocks) {
-    const hours = hoursBetween(block.start, block.end)
-    if (block.repeat === 'weekly') weekly += hours
-    else oneOff += hours
-  }
-  const round = (n: number) => Math.round(n * 10) / 10
-  return {
-    weekly: round(weekly),
-    oneOff: round(oneOff),
-    total: round(weekly * termWeeks + oneOff),
-  }
 }
 
 export async function deleteSessionCascade(sessionId: string): Promise<void> {

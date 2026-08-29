@@ -58,10 +58,6 @@ export function CalendarPage() {
     async () => (courseIds.length ? db.sessions.where('courseId').anyOf(courseIds).toArray() : []),
     [courseIds.join(',')],
   )
-  const workBlocks = useLiveQuery(
-    async () => (courseIds.length ? db.workBlocks.where('courseId').anyOf(courseIds).toArray() : []),
-    [courseIds.join(',')],
-  )
   const assignments = useLiveQuery(
     async () => (courseIds.length ? db.assignments.where('courseId').anyOf(courseIds).toArray() : []),
     [courseIds.join(',')],
@@ -84,10 +80,9 @@ export function CalendarPage() {
         to: range.to,
         courses: courses ?? [],
         sessions: sessions ?? [],
-        workBlocks: workBlocks ?? [],
         assignments: assignments ?? [],
       }),
-    [range.from, range.to, courses, sessions, workBlocks, assignments],
+    [range.from, range.to, courses, sessions, assignments],
   )
 
   // Holding the clicked object would freeze the card at the moment of the

@@ -21,7 +21,6 @@ const TABLES = [
   'transcripts',
   'notes',
   'attachments',
-  'workBlocks',
   'assignments',
   'readings',
   'weekPlans',
@@ -92,6 +91,9 @@ export async function restoreBackup(file: File): Promise<RestoreResult> {
   }
 
   const restored: Record<string, number> = {}
+  // Driven by TABLES, not by what the file happens to contain, so a backup
+  // written before study time was removed restores everything else and simply
+  // drops the table that no longer exists.
   for (const name of TABLES) {
     const rows = parsed.tables?.[name]
     if (!Array.isArray(rows)) continue

@@ -3,9 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import {
   db,
   deleteSessionCascade,
-  deleteWorkBlock,
   renumberSessions,
-  updateWorkBlock,
 } from '../db'
 import { MEETING_KIND_LABEL } from '../db/schema'
 import type { CalendarItem } from '../schedule/occurrences'
@@ -24,7 +22,6 @@ interface Props {
 const KIND_LABEL: Record<CalendarItem['kind'], string> = {
   lecture: MEETING_KIND_LABEL.lecture,
   discussion: MEETING_KIND_LABEL.discussion,
-  work: '寫作業時段',
   deadline: '繳交期限',
 }
 
@@ -46,17 +43,9 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
     async () => (item.sessionId ? ((await db.sessions.get(item.sessionId)) ?? null) : null),
     [item.sessionId],
   )
-  const block = useLiveQuery(
-    async () => (item.workBlockId ? ((await db.workBlocks.get(item.workBlockId)) ?? null) : null),
-    [item.workBlockId],
-  )
-
-  // A weekly study block is one row standing for every occurrence, so there is
-  // no such thing as changing "this Tuesday" — the whole series moves or none
-  // of it does. Saying so is kinder than an edit that silently rewrites twelve
-  // weeks at once.
-  const series = block?.repeat === 'weekly'
-  const editable = Boolean(item.sessionId) || (Boolean(item.workBlockId) && !series)
+  // Every calendar item is a meeting now, and a meeting is one row per
+  // occurrence — so moving one moves exactly that one.
+  const editable = Boolean(item.sessionId)
 
   const [date, setDate] = useState(item.date)
   const [start, setStart] = useState(item.startMin === null ? '' : timeOf(item.startMin))
@@ -86,12 +75,6 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
       })
       // Moving a meeting across a week boundary changes which week it is.
       await renumberSessions(item.courseId)
-    } else if (item.workBlockId) {
-      if (!start || !end) {
-        setError('寫作業時段需要開始與結束。')
-        return
-      }
-      await updateWorkBlock(item.workBlockId, { date, start, end })
     }
     onClose()
   }
@@ -107,19 +90,6 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
       if (!go) return
       await deleteSessionCascade(item.sessionId)
       await renumberSessions(item.courseId)
-    } else if (item.workBlockId) {
-      const go = await ask({
-        title: series ? '刪除每週固定的寫作業時段？' : `刪除 ${item.date} 的寫作業時段？`,
-        danger: true,
-        confirmLabel: series ? '刪除整個每週時段' : '刪除這段時間',
-        body: series ? (
-          <>整個學期每週的這段時間都會消失，可用時數會跟著變少。</>
-        ) : (
-          <>只影響這一天，其他日子不變。</>
-        ),
-      })
-      if (!go) return
-      await deleteWorkBlock(item.workBlockId)
     }
     onClose()
   }
@@ -156,13 +126,6 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
         </span>
         {item.canceled && <span className="tag">{item.kind === 'deadline' ? '已完成' : '停課'}</span>}
       </div>
-
-      {series && (
-        <div className="notice" style={{ marginBottom: '.9rem' }}>
-          這是<strong>每週</strong>固定的寫作業時段（每週{WEEKDAY_SHORT[weekdayOf(item.date)]}
-          ），不是只有這一天。改時間要改整段，到課程頁的「作業與閱讀」。
-        </div>
-      )}
 
       {editing && (
         <>
@@ -217,7 +180,7 @@ export function CalendarItemCard({ item, onClose, onOpen }: Props) {
           </button>
         )}
         <span className="spacer" />
-        {(item.sessionId || item.workBlockId) && (
+        {item.sessionId && (
           <button type="button" className="btn danger sm" onClick={() => void remove()}>
             刪除
           </button>

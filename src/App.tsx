@@ -10,7 +10,6 @@ import { SearchPage } from './routes/SearchPage'
 import { GlossaryPage } from './routes/GlossaryPage'
 import { SessionPage } from './routes/SessionPage'
 import { SettingsPage } from './routes/SettingsPage'
-import { migrateLegacyWorkSlots } from './db'
 import { failInterruptedJobs } from './stt/transcribe'
 import { ConfirmProvider } from './components/ConfirmProvider'
 import { NotFound } from './routes/NotFound'
@@ -19,8 +18,6 @@ export function App() {
   useEffect(() => {
     // A job left running when the tab closed has nothing advancing it now.
     void failInterruptedJobs()
-    // Study time used to live in the timetable; move any stragglers out.
-    void migrateLegacyWorkSlots()
   }, [])
 
   return (

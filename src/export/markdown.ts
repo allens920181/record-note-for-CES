@@ -50,13 +50,6 @@ export async function exportTermMarkdown(
         `- 週${WEEKDAY_SHORT[s.weekday]} ${s.start}–${s.end}` +
         `${s.room ? ` · ${s.room}` : ''} · ${SESSION_KIND_LABEL[s.kind ?? 'lecture']}`,
     )
-    const workBlocks = await db.workBlocks.where('courseId').equals(course.id).toArray()
-    const workLines = workBlocks.map((b) =>
-      b.repeat === 'weekly'
-        ? `- 每週${WEEKDAY_SHORT[b.weekday ?? 0]} ${b.start}–${b.end}${b.note ? ` · ${b.note}` : ''}`
-        : `- ${b.date} ${b.start}–${b.end}${b.note ? ` · ${b.note}` : ''}`,
-    )
-
     const req = course.requirements
 
     await writeInto(
@@ -71,7 +64,6 @@ export async function exportTermMarkdown(
       }) +
         `\n# ${course.name}\n\n` +
         (slotLines.length ? `## 上課時段\n\n${slotLines.join('\n')}\n\n` : '') +
-        (workLines.length ? `## 寫作業時段\n\n${workLines.join('\n')}\n\n` : '') +
         (req?.rules.trim() ? `## 課堂要求\n\n${req.rules.trim()}\n\n` : '') +
         (course.glossary.length
           ? `## 專有名詞\n\n${course.glossary.map((g) => `- ${g}`).join('\n')}\n`

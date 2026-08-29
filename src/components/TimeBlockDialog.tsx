@@ -1,5 +1,4 @@
 import {
-  addWorkBlock,
   createSessionOn,
   db,
   generateSessionsFromTimetable,
@@ -27,7 +26,6 @@ export interface TimeBlockDraft {
 const KIND_LABEL: Record<Exclude<ItemKind, 'deadline'>, string> = {
   lecture: MEETING_KIND_LABEL.lecture,
   discussion: MEETING_KIND_LABEL.discussion,
-  work: '寫作業時段',
 }
 
 /**
@@ -69,24 +67,12 @@ export function retime(next: TimeBlockDraft, course: Course | undefined): TimeBl
 /**
  * Puts the block where it belongs, and says what happened.
  *
- * Four outcomes hide behind one dialog, and getting them wrong is expensive: a
- * weekly meeting saved as a single occurrence silently loses the recurrence,
- * and study time saved as a meeting would create a week file nobody asked for.
+ * Two outcomes hide behind one dialog, and getting them wrong is expensive: a
+ * weekly meeting saved as a single occurrence silently loses the recurrence.
  * They live here so the calendar and the course page cannot drift apart.
  */
 export async function createTimeBlock(draft: TimeBlockDraft): Promise<string> {
   const { courseId, kind, repeat, date, start, end } = draft
-
-  if (kind === 'work') {
-    await addWorkBlock({
-      courseId,
-      repeat,
-      ...(repeat === 'weekly' ? { weekday: weekdayOf(date) } : { date }),
-      start,
-      end,
-    })
-    return repeat === 'weekly' ? '已加入每週固定的寫作業時段。' : '已加入這一天的寫作業時段。'
-  }
 
   const meetingKind = kind as MeetingKind
   if (repeat === 'once') {
@@ -206,9 +192,7 @@ export function TimeBlockDialog({ draft, onChange, courses, onClose, onSubmit, t
         />
       </div>
 
-      {draft.kind === 'work' ? (
-        <div className="notice">這個時段不會產生錄音檔案，只用來算出截止日之前還剩多少小時可以寫。</div>
-      ) : draft.repeat === 'weekly' ? (
+      {draft.repeat === 'weekly' ? (
         <div className="notice">會寫進課表，並依學期週數一次產生整學期的週次。</div>
       ) : (
         <div className="notice">只會建立這一天的一個週次，不影響課表。</div>

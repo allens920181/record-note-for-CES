@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   createAssignment,
   deleteAssignment,
   todayISO,
   updateAssignment,
 } from '../db'
-import type { Assignment, AssignmentStatus, Course, SubTask, WorkBlock } from '../db'
+import type { Assignment, AssignmentStatus, Course, SubTask } from '../db'
 import { ASSIGNMENT_STATUS_LABEL, SUBTASK_TEMPLATES } from '../db/schema'
 import { newId } from '../lib/id'
 import { ProgressTag } from './ProgressTag'
@@ -18,11 +17,17 @@ import { TimeField } from './TimeField'
 import { useConfirm } from './ConfirmProvider'
 import { NoteEditor } from './NoteEditor'
 
+/**
+ * 「時間夠」used to mean something measured: estimated hours against hours
+ * actually set aside. Nothing measures that any more, so the label says what
+ * is now true — the deadline is close, or it is not — instead of keeping a
+ * verdict it can no longer back up.
+ */
 const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
   done: { cls: 'ok', label: '已完成' },
   overdue: { cls: 'err', label: '已逾期' },
-  tight: { cls: 'err', label: '時間不夠' },
-  ok: { cls: 'ok', label: '時間夠' },
+  tight: { cls: 'warn', label: '快到期' },
+  ok: null,
   unknown: null,
 }
 
@@ -30,8 +35,6 @@ interface Props {
   assignment: Assignment
   /** The course it belongs to, for the colour stripe and the subtitle. */
   course?: Course
-  /** That course's study blocks — how many hours are left before the deadline. */
-  blocks: WorkBlock[]
   open: boolean
   onToggle: () => void
   /** Off inside one course's own page, where every row would repeat the name. */
@@ -49,13 +52,12 @@ interface Props {
 export function AssignmentCard({
   assignment: a,
   course,
-  blocks,
   open,
   onToggle,
   showCourse = true,
 }: Props) {
   const ask = useConfirm()
-  const load = workloadOf(a, blocks)
+  const load = workloadOf(a)
   const tag = PRESSURE_TAG[load.pressure]
   const doneCount = a.subtasks.filter((t) => t.done).length
 
@@ -71,17 +73,7 @@ export function AssignmentCard({
           </div>
         </div>
         {a.subtasks.length > 0 && <ProgressTag done={doneCount} total={a.subtasks.length} />}
-        {load.hoursNeeded > 0 && (
-          // Short on hours is short on hours — an overdue item with 0h left
-          // must not read green just because it isn't 'tight'.
-          <span
-            className={`tag ${
-              load.hoursAvailable < load.hoursNeeded && a.status !== 'done' ? 'err' : 'ok'
-            }`}
-          >
-            需 {load.hoursNeeded}h / 有 {load.hoursAvailable}h
-          </span>
-        )}
+        {load.hoursNeeded > 0 && <span className="tag">還要 {load.hoursNeeded}h</span>}
         {tag && <span className={`tag ${tag.cls}`}>{tag.label}</span>}
         <span className="tag">{ASSIGNMENT_STATUS_LABEL[a.status]}</span>
         <button className="btn ghost sm">{open ? '收合' : '展開'}</button>
@@ -90,7 +82,6 @@ export function AssignmentCard({
       {open && (
         <AssignmentDetail
           assignment={a}
-          hoursAvailable={load.hoursAvailable}
           onDelete={async () => {
             const go = await ask({
               title: `刪除作業「${a.title}」？`,
@@ -113,11 +104,9 @@ export function AssignmentCard({
 
 function AssignmentDetail({
   assignment,
-  hoursAvailable,
   onDelete,
 }: {
   assignment: Assignment
-  hoursAvailable: number
   onDelete: () => void
 }) {
   function patchTasks(subtasks: SubTask[]) {
@@ -209,26 +198,11 @@ function AssignmentDetail({
         emptyText="還沒拆解。可以直接套一個範本："
       />
 
-      <div className="notice" style={{ marginTop: '1rem' }}>
-        {needed > 0 ? (
-          <>
-            剩下的步驟預估需要 <strong>{needed} 小時</strong>，
-            到截止日為止，這門課排了 <strong>{hoursAvailable} 小時</strong>可以寫。
-            {hoursAvailable < needed && (
-              <span style={{ color: 'var(--danger)' }}>
-                {' '}
-                差 {Math.round((needed - hoursAvailable) * 10) / 10} 小時——
-                要嘛在<Link to="/calendar">行事曆</Link>多排時間，要嘛把範圍縮小。
-              </span>
-            )}
-          </>
-        ) : (
-          <>
-            替步驟填上預估時數，就能知道到截止日為止的{' '}
-            排出來的 <strong>{hoursAvailable} 小時</strong>夠不夠。
-          </>
-        )}
-      </div>
+      {needed > 0 && (
+        <div className="notice" style={{ marginTop: '1rem' }}>
+          剩下的步驟預估還要 <strong>{needed} 小時</strong>。
+        </div>
+      )}
 
       <div className="row" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
         <button className="btn danger sm" style={{ flex: '0 0 auto' }} onClick={onDelete}>
