@@ -633,8 +633,14 @@ a.list-item:hover { border-color: var(--accent); }
 }
 .rail-btn { justify-content: flex-start; text-align: left; }
 @media (max-width: 56rem) {
-  .course-body { display: block; }
-  .course-rail { position: static; flex-direction: row; flex-wrap: wrap; margin-bottom: 1rem; }
+  /* Still a flex column so the rail can be ordered above the list. Left to
+     document order it landed under every block — a term of thirty of them
+     put the course's own settings three screens down. */
+  .course-body { flex-direction: column; }
+  .course-rail {
+    order: -1; position: static; width: auto; flex: 0 0 auto;
+    flex-direction: row; flex-wrap: wrap; margin-bottom: 1rem;
+  }
   .rail-btn { flex: 1 1 10rem; }
 }
 
@@ -924,6 +930,12 @@ select.add-to { flex: 0 0 auto; width: 7rem; font-size: .78rem; padding: .28rem 
 .list-item.wk-doing { border-left: 3px solid var(--warn); }
 .list-item.wk-unplanned-past { border-left: 3px solid var(--danger); }
 .list-item.wk-off { opacity: .6; }
+/* The course page's rows became .block and quietly lost all of this: the
+   status classes were still emitted, but nothing was listening for them. */
+.block.wk-done { border-left-color: var(--accent); }
+.block.wk-doing { border-left-color: var(--warn); }
+.block.wk-unplanned-past { border-left-color: var(--danger); }
+.block.wk-off { opacity: .55; }
 
 /* ── setup banner ────────────────────────────────────────────────── */
 /* A reminder, not a gate: notes need none of this, so it sits above the page

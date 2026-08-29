@@ -314,7 +314,10 @@ function Row({
                 e.preventDefault()
                 e.currentTarget.blur()
               }
-              if (e.key === 'Escape') onCancelRename()
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                onCancelRename()
+              }
             }}
           />
         ) : (

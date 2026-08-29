@@ -59,6 +59,9 @@ export function BlurField({ value, onCommit, type = 'text', ...rest }: Props) {
         if (e.key === 'Enter') e.currentTarget.blur()
         // Escape puts back what was stored, which is the only undo a field has.
         if (e.key === 'Escape') {
+          // Claimed, so a dialog around this field does not also take it as
+          // "close me" — undoing a typo would otherwise throw away the dialog.
+          e.preventDefault()
           abandoned.current = true
           setText(value)
           e.currentTarget.blur()

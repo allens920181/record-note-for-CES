@@ -111,14 +111,14 @@ export function WorkBlockEditor({ courseId, termWeeks, defaultDate }: Props) {
                 label="開始"
                 value={block.start}
                 onChange={(v) => patch(block, { start: v })}
-                style={{ flex: '1 1 5.5rem' }}
+                style={{ flex: '1 1 8.5rem', minWidth: '8rem' }}
               />
               <TimeField
                 id={`we-${block.id}`}
                 label="結束"
                 value={block.end}
                 onChange={(v) => patch(block, { end: v })}
-                style={{ flex: '1 1 5.5rem' }}
+                style={{ flex: '1 1 8.5rem', minWidth: '8rem' }}
               />
               <div className="field" style={{ flex: '1 1 8rem', marginBottom: 0 }}>
                 <label htmlFor={`wn-${block.id}`}>備註</label>

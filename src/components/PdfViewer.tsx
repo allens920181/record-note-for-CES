@@ -18,7 +18,12 @@ export function PdfViewer({ file, title, onClose }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        // Claimed, so a dialog this viewer was opened from does not close too:
+        // one Escape should put back the file list, not throw it away as well.
+        e.preventDefault()
+        onClose()
+      }
       if (e.key === 'ArrowRight' || e.key === 'PageDown') setPage((p) => Math.min(pageCount, p + 1))
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') setPage((p) => Math.max(1, p - 1))
     }
