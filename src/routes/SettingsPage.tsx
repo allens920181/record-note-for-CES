@@ -230,7 +230,10 @@ export function SettingsPage() {
                 <option value="en">英文</option>
                 <option value="">自動偵測</option>
               </select>
-              <div className="hint">指定語言比自動偵測穩，中英夾雜時尤其明顯。</div>
+              <div className="hint">
+                指定語言比自動偵測穩，中英夾雜時尤其明顯。
+                中文一律存成<strong>繁體</strong>——模型多半寫简体，轉錄完會自己換回來。
+              </div>
             </div>
             <div className="field">
               <label htmlFor="s-rate">音訊位元率</label>
