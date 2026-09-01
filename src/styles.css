@@ -79,6 +79,14 @@ a { color: var(--accent-ink); }
 .side-term { padding: 0 .75rem .5rem; }
 .side-term .field { flex: 1 1 auto !important; }
 .side-tree { padding: 0 .5rem 2rem; }
+/* Only there when more than one course is open, so it is the answer to a
+   rail that has actually grown long rather than one more thing on it. */
+.side-tree-top { display: flex; justify-content: flex-end; padding: 0 .3rem .15rem; }
+.side-collapse {
+  font: inherit; font-size: .74rem; line-height: 1; color: var(--muted);
+  background: none; border: none; padding: .2rem .3rem; border-radius: 4px; cursor: pointer;
+}
+.side-collapse:hover { background: var(--surface-2); color: var(--ink); }
 .side-empty { font-size: .8rem; color: var(--muted); padding: .35rem .55rem; margin: 0; line-height: 1.7; }
 .side-indent { padding-left: 1.7rem; }
 .side-course { margin-bottom: .1rem; }

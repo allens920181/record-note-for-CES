@@ -6,6 +6,7 @@ import { SESSION_KIND_LABEL } from '../db/schema'
 import { TermPicker, useTermChoice } from './TermPicker'
 
 const REMEMBERED = 'ces:sidebar'
+const OPEN_COURSES = 'ces:sidebar-courses'
 const WIDE = '(min-width: 60rem)'
 
 const NAV = [
@@ -64,6 +65,72 @@ function useSidebarOpen(): [boolean, (v: boolean) => void] {
   return [open, set]
 }
 
+/** The courses left open in one term, or none when storage cannot be read. */
+function storedCourses(termId: string | undefined): Set<string> {
+  if (!termId) return new Set()
+  try {
+    const saved = localStorage.getItem(`${OPEN_COURSES}:${termId}`)
+    const list: unknown = saved === null ? [] : JSON.parse(saved)
+    if (!Array.isArray(list)) return new Set()
+    return new Set(list.filter((id): id is string => typeof id === 'string'))
+  } catch {
+    // Storage refused, or something else wrote nonsense under the key.
+    return new Set()
+  }
+}
+
+/**
+ * Which courses have their weeks showing, remembered across visits.
+ *
+ * A set, not one id. The rail used to close one course to open the next, so
+ * two courses you were working across could never sit open together, and the
+ * course you were in could not be collapsed for long — walking into it opened
+ * it again. Each course carries its own twist now; keeping the rail short is
+ * the reader's call, and 收合全部 is there for when it has grown long.
+ *
+ * Kept per term: a course id from last semester says nothing about this one.
+ */
+function useExpandedCourses(termId: string | undefined): {
+  expanded: ReadonlySet<string>
+  toggle: (courseId: string) => void
+  expand: (courseId: string) => void
+  collapseAll: () => void
+} {
+  const [state, setState] = useState(() => ({ termId, ids: storedCourses(termId) }))
+
+  // Switching semester swaps the whole tree. The new term's set is read during
+  // the render that changed rather than from an effect: an effect would land
+  // after the one that opens the course you are on, and overwrite it.
+  if (state.termId !== termId) setState({ termId, ids: storedCourses(termId) })
+
+  const write = (ids: Set<string>) => {
+    setState({ termId, ids })
+    if (!termId) return
+    try {
+      localStorage.setItem(`${OPEN_COURSES}:${termId}`, JSON.stringify([...ids]))
+    } catch {
+      // As above: a refused write only costs the memory of the choice.
+    }
+  }
+
+  return {
+    expanded: state.ids,
+    toggle: (courseId) => {
+      const next = new Set(state.ids)
+      // delete() reports whether it removed anything, which is the question.
+      if (!next.delete(courseId)) next.add(courseId)
+      write(next)
+    },
+    // A no-op once the course is open, so the effect that follows the reader
+    // around can run on every course-list update without looping.
+    expand: (courseId) => {
+      if (state.ids.has(courseId)) return
+      write(new Set(state.ids).add(courseId))
+    },
+    collapseAll: () => write(new Set()),
+  }
+}
+
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { pathname } = useLocation()
   const params = useParams()
@@ -81,16 +148,21 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     [termId],
   )
 
-  // One at a time. A course is fifteen weeks — two of them expanded pushed
-  // every other course off the bottom of the rail, and moving between courses
-  // is what the rail is for.
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const { expanded, toggle, expand, collapseAll } = useExpandedCourses(termId)
+
+  // The course you are looking at opens itself, and nothing closes for it.
+  // Only a course of the term on show: the picker can be pointed at another
+  // semester than the page you walked in on, and remembering an id the tree
+  // will never draw is remembering it in the wrong term.
   useEffect(() => {
-    if (hereCourse) setExpanded(hereCourse)
-  }, [hereCourse])
+    if (hereCourse && (courses ?? []).some((c) => c.id === hereCourse)) expand(hereCourse)
+    // `expand` is left out on purpose — it is rebuilt every render, and it
+    // already does nothing when the course is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hereCourse, courses])
 
   const openIds = useMemo(
-    () => (courses ?? []).filter((c) => c.id === expanded).map((c) => c.id),
+    () => (courses ?? []).filter((c) => expanded.has(c.id)).map((c) => c.id),
     [courses, expanded],
   )
   const weeks = useLiveQuery(async () => {
@@ -138,6 +210,16 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         </div>
 
         <div className="side-tree">
+          {/* One open course is one twist away from closed; several are the
+              scroll this saves you. */}
+          {openIds.length > 1 && (
+            <div className="side-tree-top">
+              <button className="side-collapse" onClick={collapseAll}>
+                收合全部
+              </button>
+            </div>
+          )}
+
           {courses === undefined ? (
             <p className="side-empty">載入中…</p>
           ) : courses.length === 0 ? (
@@ -150,8 +232,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             </p>
           ) : (
             courses.map((course) => {
-              const isOpen = expanded === course.id
-              const list = weeks?.get(course.id) ?? []
+              const isOpen = expanded.has(course.id)
+              const list = weeks?.get(course.id)
               return (
                 <div key={course.id} className="side-course">
                   <div className={`side-row${hereCourse === course.id ? ' is-here' : ''}`}>
@@ -159,7 +241,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                       className="side-twist"
                       aria-expanded={isOpen}
                       aria-label={`${isOpen ? '收合' : '展開'}「${course.name}」的週次`}
-                      onClick={() => setExpanded(isOpen ? null : course.id)}
+                      onClick={() => toggle(course.id)}
                     >
                       {isOpen ? '▾' : '▸'}
                     </button>
@@ -170,7 +252,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                   </div>
 
                   {isOpen &&
-                    (list.length === 0 ? (
+                    (list === undefined ? (
+                      // Still being fetched. Saying 「還沒有週次」 here would be
+                      // an empty state standing in for a loading one.
+                      <p className="side-empty side-indent">載入中…</p>
+                    ) : list.length === 0 ? (
                       <p className="side-empty side-indent">還沒有週次。</p>
                     ) : (
                       list.map((week) => (
