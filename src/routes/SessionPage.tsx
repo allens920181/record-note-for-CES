@@ -17,6 +17,7 @@ import { PLAYBACK_RATES, SESSION_KIND_LABEL } from '../db/schema'
 import { readFile, rootStatus } from '../storage/fsRoot'
 import { runTranscription } from '../stt/transcribe'
 import type { RunProgress } from '../stt/transcribe'
+import { hasHan, toTraditional } from '../stt/traditional'
 import { formatBytes, formatDuration, formatQuota, formatTime } from '../lib/time'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { NoteEditor } from '../components/NoteEditor'
@@ -234,6 +235,8 @@ export function SessionPage() {
    */
   const speaking = useMemo(() => speakersOf(segments), [segments])
   const heard = useMemo(() => speakersIn(segments), [segments])
+  /** An English lecture has nothing to convert, and is not offered the option. */
+  const hasChinese = useMemo(() => segments.some((s) => hasHan(s.text)), [segments])
 
   // With no audio there is no playhead, so no line is the current one — the
   // first line used to sit highlighted as if it were being spoken.
@@ -445,6 +448,37 @@ export function SessionPage() {
           ? '已記錄這次修正，可到課程頁的「詞彙表」挑出要記住的詞。'
           : null,
     )
+  }
+
+  /**
+   * Rewrites this transcript in 繁體.
+   *
+   * New ones arrive that way already. This is for the weeks recorded before
+   * that was true, which would otherwise have to be sent through the API a
+   * second time — and paid for a second time — just to change script.
+   *
+   * Nothing is filed as a correction: those exist to learn how this course
+   * spells its vocabulary, and 简体 → 繁體 teaches nothing about 加爾文.
+   */
+  async function convertToTraditional() {
+    if (!transcript) return
+    const before = transcript.segments
+    setGlossaryNote('正在轉成繁體中文…')
+    try {
+      const texts = await toTraditional(before.map((s) => s.text))
+      const changed = texts.filter((t, i) => t !== before[i].text).length
+      if (changed === 0) {
+        setGlossaryNote('這份逐字稿已經是繁體中文了。')
+        return
+      }
+      await db.transcripts.update(transcript.id, {
+        segments: before.map((s, i) => ({ ...s, text: texts[i] })),
+        updatedAt: Date.now(),
+      })
+      setGlossaryNote(`已轉成繁體中文，改寫了 ${changed} 句。`)
+    } catch {
+      setGlossaryNote('下載不到轉換用的字表，請確認網路後再試一次。')
+    }
   }
 
   /**
@@ -757,6 +791,15 @@ export function SessionPage() {
                         actions={[
                           { label: '修正錯字', onSelect: () => setEditingTranscript(true) },
                           { label: '標記說話者', onSelect: () => setMarkingSpeakers(true) },
+                          // For the weeks transcribed before 繁體 was guaranteed.
+                          ...(hasChinese
+                            ? [
+                                {
+                                  label: '轉成繁體中文',
+                                  onSelect: () => void convertToTraditional(),
+                                },
+                              ]
+                            : []),
                           // Nothing to follow without audio.
                           ...(audioUrl
                             ? [

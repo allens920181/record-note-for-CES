@@ -6,6 +6,7 @@ import type { PrepareProgress } from '../audio/ffmpegClient'
 import { writeFile } from '../storage/fsRoot'
 import { SttError, transcribeChunk } from './groq'
 import type { SttConfig } from './groq'
+import { TRADITIONAL_HINT, toTraditional } from './traditional'
 
 /** 10 minutes at 32 kbps is ~2.4 MB — far under the 25 MB API limit. */
 export const CHUNK_SECONDS = 600
@@ -27,12 +28,28 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     )
   })
 
-function glossaryPrompt(courseTerms: string[], globalTerms: string[]): string {
+/**
+ * The `prompt` field, which Whisper reads as the text that came just before the
+ * audio and continues from. It is not an instruction — the model does not obey
+ * it, it imitates it — so both jobs here are done by example: the terms teach it
+ * how this course spells things, and the hint's own characters ask for 繁體.
+ */
+function transcriptionPrompt(
+  courseTerms: string[],
+  globalTerms: string[],
+  language: string,
+): string {
   const all = [...new Set([...globalTerms, ...courseTerms])].filter(Boolean)
-  if (all.length === 0) return ''
-  // Whisper treats `prompt` as preceding context, so a plain run of the
-  // vocabulary is enough to bias spelling toward these terms.
-  return `以下為本課程可能出現的專有名詞：${all.join('、')}。`
+  const glossary = all.length > 0 ? `以下為本課程可能出現的專有名詞：${all.join('、')}。` : ''
+  // Only when the audio is known to be Chinese. Under auto-detect a Chinese
+  // sentence in front of an English lecture is a thumb on the scale of the very
+  // thing being detected — and those transcripts are converted afterwards
+  // regardless, which is where the guarantee lives anyway.
+  const hint = language === 'zh' ? TRADITIONAL_HINT : ''
+  // The hint goes last because the endpoint keeps only the final 224 tokens of
+  // a prompt: a course with a long glossary would otherwise push it out of the
+  // request altogether.
+  return `${glossary}${hint}`
 }
 
 async function withRetry<T>(
@@ -209,7 +226,11 @@ export async function runTranscription(
       apiKey: settings.sttApiKey,
       model: settings.sttModel,
       language: settings.language,
-      prompt: glossaryPrompt(course?.glossary ?? [], settings.globalGlossary),
+      prompt: transcriptionPrompt(
+        course?.glossary ?? [],
+        settings.globalGlossary,
+        settings.language,
+      ),
     }
 
     const total = prepared.chunks.length
@@ -259,7 +280,27 @@ export async function runTranscription(
       await setJob({ doneChunks: chunk.index + 1 })
     }
 
-    // ── 4. store the transcript ────────────────────────────────────────
+    // ── 4. make it 繁體 ────────────────────────────────────────────────
+    // One pass at the end rather than one per chunk: the dictionary is fetched
+    // once either way, and nothing has been stored yet, so there is no half-
+    // converted state to reason about.
+    //
+    // A failure here is not allowed to end the job. The dictionary is a
+    // separate download, and throwing away a lecture's worth of transcription
+    // because it could not be fetched is a far worse trade than storing what
+    // the model wrote — which the workspace can convert later, for free.
+    onProgress({ stage: '轉成繁體中文', done: total, total })
+    await setJob({ stage: '轉成繁體中文' })
+    let finished = merged
+    try {
+      const texts = await toTraditional(merged.map((s) => s.text))
+      finished = merged.map((s, i) => ({ ...s, text: texts[i] }))
+    } catch {
+      // Keep what came back. Nothing is said about it: the transcript is whole,
+      // and the one thing left to do is on a menu the reader is about to see.
+    }
+
+    // ── 5. store the transcript ────────────────────────────────────────
     const transcriptId = newId('tr')
     const stamp = Date.now()
     await db.transcripts.put({
@@ -268,7 +309,7 @@ export async function runTranscription(
       recordingId,
       model: settings.sttModel,
       language: settings.language,
-      segments: merged,
+      segments: finished,
       createdAt: stamp,
       updatedAt: stamp,
     })
