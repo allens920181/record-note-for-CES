@@ -11,16 +11,24 @@ import {
   useDeleteAssignment,
 } from '../components/AssignmentCard'
 import { AssignmentBoard } from '../components/AssignmentBoard'
+import { AssignmentGallery } from '../components/AssignmentGallery'
 import { Modal } from '../components/Modal'
 
 const VIEW_KEY = 'ces:assignments-view'
 
-type View = 'list' | 'board'
+const VIEWS = [
+  { id: 'list', label: '清單', hint: '依截止日排序。拆解步驟並填上預估時數，就看得出還要多久。' },
+  { id: 'board', label: '看板', hint: '依狀態分欄。用卡片上的箭頭換一欄，桌機也可以直接拖。' },
+  { id: 'gallery', label: '畫廊', hint: '一門課一區，看的是這門課欠了什麼。' },
+] as const
+
+type View = (typeof VIEWS)[number]['id']
 
 /** The remembered view, defaulting to the list. */
 function storedView(): View {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list'
+    const saved = localStorage.getItem(VIEW_KEY)
+    return VIEWS.some((v) => v.id === saved) ? (saved as View) : 'list'
   } catch {
     // A private window refusing storage only costs the memory of the choice.
     return 'list'
@@ -55,13 +63,17 @@ export function AssignmentsPage() {
     async () => (termId ? db.courses.where('termId').equals(termId).toArray() : []),
     [termId],
   )
-  const courseIds = useMemo(
+  // Ordered by createdAt, the order the sidebar and the term page list them in:
+  // the gallery's areas run down the page, and 「第三門課」 should be the third
+  // one everywhere. Dexie returns index order, which is not that.
+  const shownCourses = useMemo(
     () =>
       (courses ?? [])
         .filter((c) => !courseFilter || c.id === courseFilter)
-        .map((c) => c.id),
+        .sort((a, b) => a.createdAt - b.createdAt),
     [courses, courseFilter],
   )
+  const courseIds = useMemo(() => shownCourses.map((c) => c.id), [shownCourses])
 
   const assignments = useLiveQuery(
     async () =>
@@ -79,7 +91,7 @@ export function AssignmentsPage() {
     [assignments],
   )
   // The board has a 已完成 column, so filtering those away there would leave a
-  // column that is empty by construction. Only the list hides them.
+  // column that is empty by construction. The list and the gallery hide them.
   const rows = useMemo(
     () => (view === 'board' ? byDue : byDue.filter((a) => showDone || a.status !== 'done')),
     [byDue, showDone, view],
@@ -96,11 +108,7 @@ export function AssignmentsPage() {
         <div className="page-head">
           <div className="grow">
             <h1>作業</h1>
-            <p>
-              {view === 'board'
-                ? '依狀態分欄。用卡片上的箭頭換一欄，桌機也可以直接拖。'
-                : '依截止日排序。拆解步驟並填上預估時數，就看得出還要多久。'}
-            </p>
+            <p>{VIEWS.find((v) => v.id === view)?.hint}</p>
           </div>
           <TermPicker termId={termId} terms={terms} onChange={setTermId} id="a-term" />
           {(courses?.length ?? 0) > 1 && (
@@ -133,23 +141,18 @@ export function AssignmentsPage() {
         <div className="row" style={{ gap: '.6rem', marginBottom: '1rem' }}>
           {/* aria-pressed as well as the fill: which one is on is a state, and
               a colour is not readable as one. */}
-          <button
-            className={`btn sm${view === 'list' ? ' primary' : ''}`}
-            style={{ flex: '0 0 auto' }}
-            aria-pressed={view === 'list'}
-            onClick={() => chooseView('list')}
-          >
-            清單
-          </button>
-          <button
-            className={`btn sm${view === 'board' ? ' primary' : ''}`}
-            style={{ flex: '0 0 auto' }}
-            aria-pressed={view === 'board'}
-            onClick={() => chooseView('board')}
-          >
-            看板
-          </button>
-          {view === 'list' && (
+          {VIEWS.map((v) => (
+            <button
+              key={v.id}
+              className={`btn sm${view === v.id ? ' primary' : ''}`}
+              style={{ flex: '0 0 auto' }}
+              aria-pressed={view === v.id}
+              onClick={() => chooseView(v.id)}
+            >
+              {v.label}
+            </button>
+          ))}
+          {view !== 'board' && (
             <>
               <span className="toolbar-sep" />
               <button
@@ -175,20 +178,29 @@ export function AssignmentsPage() {
             only `assignments` reports "沒有未完成的作業" during every load. */}
         {termId === undefined || courses === undefined || assignments === undefined ? (
           <div className="empty">載入中…</div>
+        ) : courses.length === 0 ? (
+          <div className="empty">
+            <p>這個學期還沒有課程。作業要掛在某一門課底下，所以得先有課。</p>
+            {/* Not「新增作業」— that button would fail, and offering an action
+                that cannot work is worse than offering none. */}
+            <Link className="btn primary" to={`/term/${termId}`}>
+              去建立一門課 →
+            </Link>
+          </div>
+        ) : view === 'gallery' ? (
+          // Not gated on rows.length: an area saying 「這門課沒有作業」 beside
+          // the others is the answer, and one page-wide empty state would hide
+          // which course that is true of.
+          <AssignmentGallery
+            courses={shownCourses}
+            assignments={rows}
+            onOpen={setOpen}
+            onAdd={setCreating}
+            hidingDone={!showDone}
+          />
         ) : rows.length === 0 ? (
           <div className="empty">
-            {courses.length === 0 ? (
-              <>
-                <p>
-                  這個學期還沒有課程。作業要掛在某一門課底下，所以得先有課。
-                </p>
-                {/* Not「新增作業」— that button would fail, and offering an
-                    action that cannot work is worse than offering none. */}
-                <Link className="btn primary" to={`/term/${termId}`}>
-                  去建立一門課 →
-                </Link>
-              </>
-            ) : showDone || view === 'board' ? (
+            {showDone || view === 'board' ? (
               <>
                 <p>這個學期還沒有任何作業。</p>
                 <button
@@ -224,10 +236,11 @@ export function AssignmentsPage() {
         )}
       </main>
 
-      {/* On the board a card opens in a dialog rather than in place: the
-          columns are a third of the page wide, and everything inside a card —
-          three fields, the brief, the steps — needs the whole of it. */}
-      {view === 'board' && openCard && (
+      {/* Away from the list a card opens in a dialog rather than in place: a
+          column is a third of the page wide and a tile is smaller still, while
+          what is inside — three fields, the brief, the steps — needs the whole
+          of it. */}
+      {view !== 'list' && openCard && (
         <Modal wide title={openCard.title} onClose={() => setOpen(null)} cancelLabel="關閉">
           <AssignmentDetail
             assignment={openCard}
