@@ -1,5 +1,5 @@
 import { db, getSettings, saveSettings } from '../db'
-import { endOfWeeks } from '../lib/dates'
+import { endOfWeeks, stampOf } from '../lib/dates'
 
 const FORMAT = 'record-note-for-ces/backup'
 const VERSION = 1
@@ -63,7 +63,7 @@ export function backupBlob(backup: BackupFile): Blob {
 }
 
 export function backupFileName(): string {
-  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+  const stamp = stampOf(new Date()).replace(/[ :]/g, '-')
   return `神學院錄音筆記 備份 ${stamp}.json`
 }
 

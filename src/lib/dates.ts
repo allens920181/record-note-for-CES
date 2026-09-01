@@ -96,6 +96,17 @@ export function timeOf(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
+/**
+ * A moment as the wall clock showed it: `2026-09-01 21:30`. For names people
+ * read — a recording, a backup file.
+ *
+ * `toISOString()` writes UTC there instead, which in Taipei labels a 21:30
+ * class 13:30, and anything before 8am with the day before's date.
+ */
+export function stampOf(d: Date): string {
+  return `${toISO(d)} ${timeOf(d.getHours() * 60 + d.getMinutes())}`
+}
+
 export const WEEKDAY_SHORT = ['日', '一', '二', '三', '四', '五', '六'] as const
 
 export function formatMonthTitle(iso: string): string {

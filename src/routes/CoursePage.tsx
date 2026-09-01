@@ -9,11 +9,14 @@ import {
   updateCourse,
   generateSessionsFromTimetable,
   insertNoteBlock,
+  meetingsOneDayEarly,
+  realignMeetingsToTimetable,
   renumberSessions,
   todayISO,
 } from '../db'
 import { COURSE_KIND_LABEL, SESSION_KIND_LABEL, isMeeting } from '../db/schema'
 import type { SessionKind } from '../db/schema'
+import { weekdayOf } from '../lib/dates'
 import { Breadcrumbs, PageShell, TopBar } from '../components/Layout'
 import { ReadingList } from '../components/ReadingList'
 import { CorrectionsPanel } from '../components/CorrectionsPanel'
@@ -165,6 +168,25 @@ export function CoursePage() {
     }
   }, [courseId])
 
+  // Meetings the timetable disagrees with — see 依課表產生整學期 below.
+  const offByOne = useMemo(
+    () => (course && sessions ? meetingsOneDayEarly(course, sessions) : []),
+    [course, sessions],
+  )
+  // Which day they are on and which day they belong on, said once even when
+  // the course meets twice a week: 「週一 → 週二」.
+  const offByOneDays = useMemo(
+    () =>
+      [
+        ...new Set(
+          offByOne.map(
+            (m) => `週${WEEKDAY_LABELS[weekdayOf(m.from)]} → 週${WEEKDAY_LABELS[weekdayOf(m.to)]}`,
+          ),
+        ),
+      ].join('、'),
+    [offByOne],
+  )
+
   // Hooks must run on every render, so this sits above the early returns.
   const dueList = useMemo(
     () =>
@@ -207,6 +229,16 @@ export function CoursePage() {
             ? '這些時段的週次都已經存在了，沒有新增任何一個。'
             : `產生了 ${created} 個週次${skipped > 0 ? `，另有 ${skipped} 個已存在而略過` : ''}。`,
       })
+    } catch (err) {
+      setMessage({ kind: 'err', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  async function realign() {
+    setMessage(null)
+    try {
+      const { moved } = await realignMeetingsToTimetable(courseId)
+      setMessage({ kind: 'ok', text: `已把 ${moved} 堂課移到課表上的那一天，週次也重新編過。` })
     } catch (err) {
       setMessage({ kind: 'err', text: err instanceof Error ? err.message : String(err) })
     }
@@ -288,6 +320,24 @@ export function CoursePage() {
         {message && (
           <div className={`notice ${message.kind}`} style={{ marginBottom: '1rem' }}>
             {message.text}
+          </div>
+        )}
+
+        {/* Said here rather than left to be noticed: the dates are wrong on the
+            list right below, and the reader cannot tell a bug from their own
+            typo without being told which one it is. */}
+        {offByOne.length > 0 && (
+          <div className="notice warn" style={{ marginBottom: '1rem' }}>
+            <strong>{`有 ${offByOne.length} 堂課的日期比課表早一天（${offByOneDays}）。`}</strong>
+            <p style={{ margin: '.35rem 0 .5rem' }}>
+              舊版的「依課表產生整學期」把日期換算成 UTC 才寫下來，而台灣的午夜在那裡還是前一天，於是整學期都往前挪了一格。產生日期的地方已經修好，這幾堂是那時候留下來的。
+            </p>
+            <p style={{ margin: '0 0 .6rem' }}>
+              只移動時間與類型仍然對得上課表的那幾堂：自己改過日期的、補的課都不會被碰到，錄音與筆記跟著各自的那一堂走。
+            </p>
+            <button className="btn" onClick={realign}>
+              把日期移回課表上的那一天
+            </button>
           </div>
         )}
 
