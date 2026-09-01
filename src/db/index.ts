@@ -3,7 +3,7 @@ import type { EntityTable } from 'dexie'
 import { newId } from '../lib/id'
 import { deleteDir, deleteFile } from '../storage/fsRoot'
 import { DEFAULT_SETTINGS, FREE_TIER, MEETING_KINDS, isMeeting } from './schema'
-import { addDays, endOfWeeks, todayISO, weeksBetween } from '../lib/dates'
+import { addDays, endOfWeeks, todayISO, weekdayOf, weeksBetween } from '../lib/dates'
 import { correctionKey, diffOnce, isMeaningful, suggestFrom } from '../schedule/corrections'
 import type {
   AppSettings,
@@ -373,12 +373,19 @@ const NOTE_AFTER = MEETING_KINDS.length
 
 export const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'] as const
 
-/** The first date on or after `iso` that falls on the given weekday. */
+/**
+ * The first date on or after `iso` that falls on the given weekday.
+ *
+ * Built out of the shared date helpers rather than a `Date` of its own. The
+ * line this replaces ended in `toISOString().slice(0, 10)`, which reads the
+ * date back in UTC — and local midnight anywhere east of Greenwich is still
+ * the previous day there. So every meeting a timetable produced landed one day
+ * early for the whole of Asia: a 週二 slot generated 週一 files, and the first
+ * two of them fell in the same teaching week because one of them predated the
+ * term. In UTC the same code was right, which is why it read as correct.
+ */
 export function nextWeekdayOnOrAfter(iso: string, weekday: number): string {
-  const d = new Date(`${iso}T00:00:00`)
-  const shift = (weekday - d.getDay() + 7) % 7
-  d.setDate(d.getDate() + shift)
-  return d.toISOString().slice(0, 10)
+  return addDays(iso, (weekday - weekdayOf(iso) + 7) % 7)
 }
 
 export interface GenerateResult {
@@ -452,6 +459,67 @@ export async function generateSessionsFromTimetable(courseId: string): Promise<G
   if (rows.length > 0) await db.sessions.bulkAdd(rows)
   const wanted = course.slots.length * weeksBetween(term.startDate, term.endDate)
   return { created: rows.length, skipped: wanted - rows.length }
+}
+
+export interface DateShift {
+  id: string
+  from: string
+  to: string
+}
+
+/**
+ * Meetings sitting exactly one day before the weekday their slot names.
+ *
+ * This is the fingerprint the bug above left behind, and deliberately nothing
+ * wider. A meeting moved by hand — a make-up class, the week the room was
+ * taken — is a real thing that happened on a real day, and a repair that swept
+ * those up as well would be inventing a timetable nobody wrote. So a session
+ * only counts when its kind and both its times still match a slot, its own
+ * weekday matches no slot at all, and the day it would move onto is free.
+ *
+ * Nothing is written here: the count is what the course page needs in order to
+ * say what it is about to do before it does it.
+ */
+export function meetingsOneDayEarly(course: Course, sessions: Session[]): DateShift[] {
+  const taken = new Set(sessions.map((s) => `${s.date}|${s.kind ?? 'lecture'}`))
+  const out: DateShift[] = []
+  for (const s of sessions) {
+    const kind = s.kind ?? 'lecture'
+    if (!isMeeting(kind)) continue
+    const sameKind = course.slots.filter((slot) => (slot.kind ?? 'lecture') === kind)
+    const wd = weekdayOf(s.date)
+    // A day the timetable already names has nothing to answer for.
+    if (sameKind.some((slot) => slot.weekday === wd)) continue
+    const slot = sameKind.find(
+      (slot) => slot.weekday === (wd + 1) % 7 && slot.start === s.start && slot.end === s.end,
+    )
+    if (!slot) continue
+    const to = addDays(s.date, 1)
+    if (taken.has(`${to}|${kind}`)) continue
+    taken.add(`${to}|${kind}`)
+    out.push({ id: s.id, from: s.date, to })
+  }
+  return out
+}
+
+/**
+ * Moves those meetings onto the day their slot names.
+ *
+ * Only ever offered, never run on its own: a date carries recordings and notes
+ * that were filed under it, and deciding those were filed on the wrong day is
+ * the reader's call, not a migration's.
+ */
+export async function realignMeetingsToTimetable(courseId: string): Promise<{ moved: number }> {
+  const course = await db.courses.get(courseId)
+  if (!course) throw new Error('找不到這門課')
+  const moves = meetingsOneDayEarly(course, await sessionsInOrder(courseId))
+  if (moves.length === 0) return { moved: 0 }
+  await db.transaction('rw', db.sessions, async () => {
+    for (const m of moves) await db.sessions.update(m.id, { date: m.to })
+  })
+  // 第 N 週 is read off the date, so it has to be read again.
+  await renumberSessions(courseId)
+  return { moved: moves.length }
 }
 
 /**

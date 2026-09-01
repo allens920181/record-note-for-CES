@@ -1,5 +1,6 @@
 import { db } from '../db'
 import type { RecordingDraft } from '../db/schema'
+import { stampOf } from '../lib/dates'
 import { newId } from '../lib/id'
 import { deleteDir, listDir, readFile, writeFile } from '../storage/fsRoot'
 
@@ -275,7 +276,7 @@ export async function assembleDraft(draft: RecordingDraft): Promise<File> {
   // MediaRecorder's timeslice chunks are one continuous stream cut into pieces:
   // only the first carries the header, so order matters and concatenation is
   // exactly the right way to put them back together.
-  const stamp = new Date(draft.startedAt).toISOString().slice(0, 16).replace('T', ' ')
+  const stamp = stampOf(new Date(draft.startedAt))
   const ext = extensionFor(draft.mimeType)
   return new File(buffers, `課堂錄音 ${stamp}.${ext}`, { type: draft.mimeType })
 }
