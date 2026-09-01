@@ -886,6 +886,64 @@ select.only-spk { flex: 0 0 auto; width: auto; font-size: .74rem; padding: .15re
 .asg-detail { padding: 0 1.1rem 1.1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .asg-detail h3 { margin-top: 0; }
 
+/* ── assignments as a board ──────────────────────────────────────── */
+/* Three columns of equal width, each as tall as its own pile: `start`, so a
+   column of one card is not a column of one card and a metre of nothing. */
+.board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; align-items: start; }
+/* Tinted, so the white cards read as a pile on something rather than as three
+   loose stacks — and so the column you are dragging onto has an edge. */
+.board-col {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .55rem; min-width: 0; min-height: 7rem;
+}
+.board-col.is-over { border-color: var(--accent); background: var(--accent-wash); }
+.board-head {
+  display: flex; align-items: center; gap: .45rem;
+  font-family: var(--body); font-size: .85rem; font-weight: 500; color: var(--ink-soft);
+  padding: .15rem .3rem .5rem;
+}
+.board-count {
+  font-family: var(--mono); font-size: .7rem; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 0 .4rem;
+}
+.board-cards { display: flex; flex-direction: column; gap: .5rem; }
+.board-empty { margin: 0; padding: 1rem .3rem; text-align: center; font-size: .78rem; color: var(--muted); }
+.board-card {
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+  border-radius: 6px; box-shadow: var(--shadow); cursor: grab;
+}
+.board-card:hover { border-color: var(--accent); }
+.board-card.is-lifted { opacity: .45; }
+/* The way into the card: a real button, so it is reachable by tab. */
+.board-open {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  font: inherit; color: inherit; background: none; border: none;
+  padding: .55rem .6rem .35rem;
+}
+.board-title { display: block; font-size: .88rem; font-weight: 500; line-height: 1.5; }
+.board-sub { display: block; margin-top: .15rem; font-size: .76rem; color: var(--muted); }
+.board-sub .is-late { color: var(--danger); }
+.board-foot {
+  display: flex; align-items: center; gap: .3rem; flex-wrap: wrap;
+  padding: 0 .6rem .5rem;
+}
+.board-move { display: flex; gap: .2rem; margin-left: auto; }
+.board-arrow {
+  font: inherit; font-size: .9rem; line-height: 1; color: var(--muted);
+  background: none; border: 1px solid var(--line); border-radius: 4px;
+  padding: .1rem .4rem; cursor: pointer;
+}
+.board-arrow:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); }
+.board-arrow:disabled { opacity: .35; cursor: default; }
+/* Narrow: three columns of a phone's width hold about two words each. */
+@media (max-width: 52rem) {
+  .board { grid-template-columns: 1fr; }
+}
+
+/* A hairline between two groups of buttons in one toolbar row. */
+.toolbar-sep { flex: 0 0 auto; width: 1px; align-self: stretch; background: var(--line); margin: 0 .15rem; }
+
 /* ── search ──────────────────────────────────────────────────────── */
 .hit { border: 1px solid var(--line); font-family: var(--body); }
 .hit:hover { border-color: var(--accent); }

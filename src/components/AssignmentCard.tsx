@@ -6,7 +6,7 @@ import {
   updateAssignment,
 } from '../db'
 import type { Assignment, AssignmentStatus, Course, SubTask } from '../db'
-import { ASSIGNMENT_STATUS_LABEL, SUBTASK_TEMPLATES } from '../db/schema'
+import { ASSIGNMENT_STATUSES, ASSIGNMENT_STATUS_LABEL, SUBTASK_TEMPLATES } from '../db/schema'
 import { newId } from '../lib/id'
 import { ProgressTag } from './ProgressTag'
 import { TaskChecklist } from './TaskChecklist'
@@ -29,6 +29,31 @@ const PRESSURE_TAG: Record<Pressure, { cls: string; label: string } | null> = {
   tight: { cls: 'warn', label: '快到期' },
   ok: null,
   unknown: null,
+}
+
+/**
+ * The one confirm dialog for deleting an assignment, wherever it is met.
+ *
+ * A hook rather than a helper: it needs the provider, and the board reached
+ * the same act from a different card. Two copies of a destructive dialog is
+ * two wordings to keep honest.
+ */
+export function useDeleteAssignment(): (a: Assignment) => Promise<void> {
+  const ask = useConfirm()
+  return async (a) => {
+    const go = await ask({
+      title: `刪除作業「${a.title}」？`,
+      danger: true,
+      confirmLabel: '刪除這份作業',
+      // An assignment nobody has broken down yet was offered "0 個步驟也會一起
+      // 消失", which is both untrue and faintly absurd.
+      body:
+        a.subtasks.length > 0
+          ? `拆解出來的 ${a.subtasks.length} 個步驟也會一起消失。`
+          : '這份作業的要求與備註也會一起消失。',
+    })
+    if (go) await deleteAssignment(a.id)
+  }
 }
 
 interface Props {
@@ -56,7 +81,7 @@ export function AssignmentCard({
   onToggle,
   showCourse = true,
 }: Props) {
-  const ask = useConfirm()
+  const remove = useDeleteAssignment()
   const load = workloadOf(a)
   const tag = PRESSURE_TAG[load.pressure]
   const doneCount = a.subtasks.filter((t) => t.done).length
@@ -80,29 +105,14 @@ export function AssignmentCard({
       </div>
 
       {open && (
-        <AssignmentDetail
-          assignment={a}
-          onDelete={async () => {
-            const go = await ask({
-              title: `刪除作業「${a.title}」？`,
-              danger: true,
-              confirmLabel: '刪除這份作業',
-              // An assignment nobody has broken down yet was offered "0 個步驟
-              // 也會一起消失", which is both untrue and faintly absurd.
-              body:
-                a.subtasks.length > 0
-                  ? `拆解出來的 ${a.subtasks.length} 個步驟也會一起消失。`
-                  : '這份作業的要求與備註也會一起消失。',
-            })
-            if (go) await deleteAssignment(a.id)
-          }}
-        />
+        <AssignmentDetail assignment={a} onDelete={() => void remove(a)} />
       )}
     </div>
   )
 }
 
-function AssignmentDetail({
+/** Everything about one assignment: shared by the row and the board's dialog. */
+export function AssignmentDetail({
   assignment,
   onDelete,
 }: {
@@ -131,7 +141,7 @@ function AssignmentDetail({
               })
             }
           >
-            {(Object.keys(ASSIGNMENT_STATUS_LABEL) as AssignmentStatus[]).map((k) => (
+            {ASSIGNMENT_STATUSES.map((k) => (
               <option key={k} value={k}>
                 {ASSIGNMENT_STATUS_LABEL[k]}
               </option>

@@ -4,14 +4,46 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import { Breadcrumbs, TopBar } from '../components/Layout'
 import { TermPicker, useTermChoice } from '../components/TermPicker'
-import { AssignmentCard, NewAssignmentDialog } from '../components/AssignmentCard'
+import {
+  AssignmentCard,
+  AssignmentDetail,
+  NewAssignmentDialog,
+  useDeleteAssignment,
+} from '../components/AssignmentCard'
+import { AssignmentBoard } from '../components/AssignmentBoard'
+import { Modal } from '../components/Modal'
+
+const VIEW_KEY = 'ces:assignments-view'
+
+type View = 'list' | 'board'
+
+/** The remembered view, defaulting to the list. */
+function storedView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list'
+  } catch {
+    // A private window refusing storage only costs the memory of the choice.
+    return 'list'
+  }
+}
 
 export function AssignmentsPage() {
   const { hash } = useLocation()
   const [urlParams] = useSearchParams()
   const [showDone, setShowDone] = useState(false)
+  const [view, setView] = useState<View>(storedView)
   const [open, setOpen] = useState<string | null>(hash ? hash.slice(1) : null)
   const [creating, setCreating] = useState<string | null>(null)
+  const remove = useDeleteAssignment()
+
+  function chooseView(next: View) {
+    setView(next)
+    try {
+      localStorage.setItem(VIEW_KEY, next)
+    } catch {
+      // As above.
+    }
+  }
 
   const { termId: remembered, setTermId, terms } = useTermChoice()
   // A deadline opened from the calendar names its own term; without that the
@@ -39,13 +71,20 @@ export function AssignmentsPage() {
 
   const courseById = useMemo(() => new Map((courses ?? []).map((c) => [c.id, c])), [courses])
 
-  const rows = useMemo(
+  const byDue = useMemo(
     () =>
-      (assignments ?? [])
-        .filter((a) => showDone || a.status !== 'done')
-        .sort((x, y) => x.due.localeCompare(y.due) || x.title.localeCompare(y.title)),
-    [assignments, showDone],
+      [...(assignments ?? [])].sort(
+        (x, y) => x.due.localeCompare(y.due) || x.title.localeCompare(y.title),
+      ),
+    [assignments],
   )
+  // The board has a 已完成 column, so filtering those away there would leave a
+  // column that is empty by construction. Only the list hides them.
+  const rows = useMemo(
+    () => (view === 'board' ? byDue : byDue.filter((a) => showDone || a.status !== 'done')),
+    [byDue, showDone, view],
+  )
+  const openCard = useMemo(() => byDue.find((a) => a.id === open) ?? null, [byDue, open])
 
   return (
     <>
@@ -57,7 +96,11 @@ export function AssignmentsPage() {
         <div className="page-head">
           <div className="grow">
             <h1>作業</h1>
-            <p>依截止日排序。拆解步驟並填上預估時數，就看得出還要多久。</p>
+            <p>
+              {view === 'board'
+                ? '依狀態分欄。用卡片上的箭頭換一欄，桌機也可以直接拖。'
+                : '依截止日排序。拆解步驟並填上預估時數，就看得出還要多久。'}
+            </p>
           </div>
           <TermPicker termId={termId} terms={terms} onChange={setTermId} id="a-term" />
           {(courses?.length ?? 0) > 1 && (
@@ -88,20 +131,43 @@ export function AssignmentsPage() {
         </div>
 
         <div className="row" style={{ gap: '.6rem', marginBottom: '1rem' }}>
+          {/* aria-pressed as well as the fill: which one is on is a state, and
+              a colour is not readable as one. */}
           <button
-            className={`btn sm${showDone ? '' : ' primary'}`}
+            className={`btn sm${view === 'list' ? ' primary' : ''}`}
             style={{ flex: '0 0 auto' }}
-            onClick={() => setShowDone(false)}
+            aria-pressed={view === 'list'}
+            onClick={() => chooseView('list')}
           >
-            未完成
+            清單
           </button>
           <button
-            className={`btn sm${showDone ? ' primary' : ''}`}
+            className={`btn sm${view === 'board' ? ' primary' : ''}`}
             style={{ flex: '0 0 auto' }}
-            onClick={() => setShowDone(true)}
+            aria-pressed={view === 'board'}
+            onClick={() => chooseView('board')}
           >
-            全部
+            看板
           </button>
+          {view === 'list' && (
+            <>
+              <span className="toolbar-sep" />
+              <button
+                className={`btn sm${showDone ? '' : ' primary'}`}
+                style={{ flex: '0 0 auto' }}
+                onClick={() => setShowDone(false)}
+              >
+                未完成
+              </button>
+              <button
+                className={`btn sm${showDone ? ' primary' : ''}`}
+                style={{ flex: '0 0 auto' }}
+                onClick={() => setShowDone(true)}
+              >
+                全部
+              </button>
+            </>
+          )}
         </div>
 
         {/* Courses load before assignments can be asked for, and an empty course
@@ -122,7 +188,7 @@ export function AssignmentsPage() {
                   去建立一門課 →
                 </Link>
               </>
-            ) : showDone ? (
+            ) : showDone || view === 'board' ? (
               <>
                 <p>這個學期還沒有任何作業。</p>
                 <button
@@ -141,6 +207,8 @@ export function AssignmentsPage() {
               </>
             )}
           </div>
+        ) : view === 'board' ? (
+          <AssignmentBoard assignments={rows} courseById={courseById} onOpen={setOpen} />
         ) : (
           <div className="stack">
             {rows.map((a) => (
@@ -155,6 +223,21 @@ export function AssignmentsPage() {
           </div>
         )}
       </main>
+
+      {/* On the board a card opens in a dialog rather than in place: the
+          columns are a third of the page wide, and everything inside a card —
+          three fields, the brief, the steps — needs the whole of it. */}
+      {view === 'board' && openCard && (
+        <Modal wide title={openCard.title} onClose={() => setOpen(null)} cancelLabel="關閉">
+          <AssignmentDetail
+            assignment={openCard}
+            onDelete={async () => {
+              await remove(openCard)
+              setOpen(null)
+            }}
+          />
+        </Modal>
+      )}
 
       {creating !== null && (
         <NewAssignmentDialog
