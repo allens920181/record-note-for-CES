@@ -291,6 +291,9 @@ export const ASSIGNMENT_STATUS_LABEL: Record<AssignmentStatus, string> = {
   done: '已完成',
 }
 
+/** Declared order: the board reads left to right, and so does the work. */
+export const ASSIGNMENT_STATUSES: AssignmentStatus[] = ['todo', 'doing', 'done']
+
 export interface SubTask {
   id: string
   title: string
