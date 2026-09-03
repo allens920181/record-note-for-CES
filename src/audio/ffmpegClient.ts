@@ -40,11 +40,34 @@ let logBuffer: string[] = []
 let probedDurationSec = 0
 let lastEncodedSec = 0
 
-function noteDuration(line: string) {
+interface Silence {
+  start: number
+  end: number
+}
+
+/**
+ * Where nobody was speaking, in seconds. Read off the same log lines as the
+ * duration and for the same reason: there can be thousands of them in a
+ * three-hour lecture, far more than the capped buffer holds.
+ */
+let silences: Silence[] = []
+
+function noteLine(line: string) {
   const dur = /Duration:\s*(\d+):(\d{2}):(\d{2})\.(\d+)/.exec(line)
   if (dur) {
     const [, h, m, sec, frac] = dur
     probedDurationSec = Number(h) * 3600 + Number(m) * 60 + Number(sec) + Number(`0.${frac}`)
+    return
+  }
+  // Taken from the end line rather than paired with the start one: the two
+  // arrive interleaved with progress output, and end carries both numbers.
+  const quiet = /silence_end:\s*(-?[\d.]+)\s*\|\s*silence_duration:\s*([\d.]+)/.exec(line)
+  if (quiet) {
+    const end = Number(quiet[1])
+    const length = Number(quiet[2])
+    if (Number.isFinite(end) && Number.isFinite(length)) {
+      silences.push({ start: Math.max(0, end - length), end })
+    }
     return
   }
   // Streaming WebM from MediaRecorder carries no duration in its header, so
@@ -54,6 +77,55 @@ function noteDuration(line: string) {
     const [, h, m, sec, frac] = t
     lastEncodedSec = Number(h) * 3600 + Number(m) * 60 + Number(sec) + Number(`0.${frac}`)
   }
+}
+
+/**
+ * A silence long enough to be a pause between sentences rather than the gap
+ * between two words. The threshold is in dBFS and deliberately generous: a
+ * lecture hall has a noise floor, and a cut point that is merely quiet is no
+ * worse than the arbitrary one it replaces.
+ */
+const SILENCE_FILTER = 'silencedetect=noise=-32dB:d=0.35'
+
+/** How far from the target length a cut may wander to land in a pause. */
+const DRIFT = 0.25
+
+/**
+ * Where to cut, given where the pauses are.
+ *
+ * A chunk boundary in the middle of a word damages that word twice — the tail
+ * is missing from one request and the head from the next — and it also hands
+ * the model a chunk that opens mid-syllable, which is where its worst guessing
+ * happens. Landing the cut in a pause costs nothing and removes both.
+ *
+ * The pause nearest in size, not in position: within the window every candidate
+ * is an equally arbitrary place to stop, so the one most likely to be a real
+ * breath wins. With no pause to be found the target itself is used, which is
+ * exactly the behaviour this replaces.
+ */
+export function cutPoints(marks: Silence[], durationSec: number, target: number): number[] {
+  const points: number[] = []
+  const window = target * DRIFT
+  let from = 0
+  while (durationSec - from > target + window) {
+    const want = from + target
+    let best: Silence | null = null
+    let bestMid = want
+    for (const mark of marks) {
+      const mid = (Math.max(mark.start, from) + mark.end) / 2
+      if (Math.abs(mid - want) > window) continue
+      const length = mark.end - Math.max(mark.start, from)
+      const bestLength = best ? best.end - Math.max(best.start, from) : 0
+      if (length > bestLength || (length === bestLength && Math.abs(mid - want) < Math.abs(bestMid - want))) {
+        best = mark
+        bestMid = mid
+      }
+    }
+    const at = best ? bestMid : want
+    points.push(Number(at.toFixed(3)))
+    from = at
+  }
+  return points
 }
 
 function absolute(path: string): string {
@@ -68,7 +140,7 @@ async function getFFmpeg(onProgress?: (p: PrepareProgress) => void): Promise<FFm
   loading = (async () => {
     const ff = new FFmpeg()
     ff.on('log', ({ message }) => {
-      noteDuration(message)
+      noteLine(message)
       logBuffer.push(message)
       // Keep the buffer bounded — a long transcode emits thousands of lines.
       if (logBuffer.length > 400) logBuffer.splice(0, logBuffer.length - 400)
@@ -115,6 +187,33 @@ function failure(what: string): Error {
 }
 
 /**
+ * Where each chunk begins in the recording, taken from the muxer's own list.
+ *
+ * Falls back to the times the cuts were asked for, and then to even spacing:
+ * a chunk whose offset is wrong shifts every timestamp in it, which is worse
+ * to read than one that is slightly out.
+ */
+async function readStarts(
+  ff: FFmpeg,
+  listName: string,
+  names: string[],
+  points: number[],
+): Promise<number[]> {
+  const planned = [0, ...points]
+  try {
+    const csv = await ff.readFile(listName, 'utf8')
+    const rows = String(csv)
+      .split('\n')
+      .map((line) => Number(line.split(',')[1]))
+      .filter((n) => Number.isFinite(n))
+    if (rows.length === names.length) return rows
+  } catch {
+    // No list written; the planned times are still close.
+  }
+  return names.map((_, i) => planned[i] ?? planned[planned.length - 1] ?? 0)
+}
+
+/**
  * Turns an uploaded recording into (a) one compact Opus file to play back and
  * (b) chunks small enough for the transcription API's 25 MB limit.
  *
@@ -122,9 +221,10 @@ function failure(what: string): Error {
  * `-c copy`, so segmenting costs almost nothing and every chunk's timestamps
  * line up exactly with the file the player is scrubbing.
  *
- * Chunks are contiguous rather than overlapping: chunk k starts at exactly
- * k * chunkSeconds. The tradeoff is that a word spoken across a cut can be
- * clipped — a handful of words in a three-hour lecture.
+ * Chunks are contiguous rather than overlapping, and each one ends in a pause
+ * where there is a pause to end in — see `cutPoints`. Finding those costs
+ * nothing either: `silencedetect` rides along on the encode, which is already
+ * decoding every sample, rather than paying for a second pass over the file.
  */
 export async function prepareChunks(
   file: File,
@@ -136,8 +236,11 @@ export async function prepareChunks(
   probedDurationSec = 0
   lastEncodedSec = 0
 
+  silences = []
+
   const inputName = `input.${extensionOf(file.name)}`
   const pattern = 'chunk%04d.ogg'
+  const listName = 'chunks.csv'
   const written: string[] = []
 
   let stage: PrepareStage = 'encoding'
@@ -159,6 +262,9 @@ export async function prepareChunks(
       '-vn', // phone recordings are sometimes .mp4 with a video track
       '-ac', '1',
       '-ar', '16000',
+      // Analysis only — the filter reports where the pauses are and passes
+      // every sample through untouched.
+      '-af', SILENCE_FILTER,
       '-c:a', 'libopus',
       '-b:a', `${opts.bitrateKbps}k`,
       FULL,
@@ -172,15 +278,27 @@ export async function prepareChunks(
     // Pass 2 — cut the encoded file into pieces without re-encoding.
     stage = 'segmenting'
     onProgress({ stage, ratio: 0 })
+    const points = cutPoints(silences, durationSec, opts.chunkSeconds)
     const segmentCode = await ff.exec([
       '-i', FULL,
       '-c', 'copy',
       '-f', 'segment',
-      '-segment_time', String(opts.chunkSeconds),
+      // With nothing to cut at, one long segment_time yields the single chunk
+      // an empty list could not ask for.
+      ...(points.length > 0
+        ? ['-segment_times', points.join(',')]
+        : ['-segment_time', String(Math.max(opts.chunkSeconds, Math.ceil(durationSec) + 1))]),
+      // Where each piece actually starts, rather than where it was asked to.
+      // Cuts land on the next Ogg page, so the two differ by a fraction of a
+      // second — which is a fraction of a second of drift on every timestamp
+      // in the chunk if the requested time is used instead.
+      '-segment_list', listName,
+      '-segment_list_type', 'csv',
       '-reset_timestamps', '1',
       pattern,
     ])
     if (segmentCode !== 0) throw failure(`音訊切片失敗（代碼 ${segmentCode}）。`)
+    written.push(listName)
 
     stage = 'collecting'
     onProgress({ stage, ratio: 0 })
@@ -193,11 +311,13 @@ export async function prepareChunks(
 
     if (names.length === 0) throw failure('轉檔沒有產生任何音訊片段。')
 
+    const starts = await readStarts(ff, listName, names, points)
+
     const chunks: AudioChunk[] = []
     for (let i = 0; i < names.length; i++) {
       chunks.push({
         index: i,
-        startSec: i * opts.chunkSeconds,
+        startSec: starts[i],
         blob: toBlob(await ff.readFile(names[i]), 'audio/ogg'),
         fileName: names[i],
       })

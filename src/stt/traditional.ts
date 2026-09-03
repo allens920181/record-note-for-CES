@@ -9,9 +9,10 @@
  *
  * Two things push back on that, and both are needed.
  *
- * `TRADITIONAL_HINT` rides along in the request's `prompt`, which Whisper reads
- * as the text immediately preceding the audio and then continues in the style
- * of. It is the only lever the API offers over the script, and it costs nothing.
+ * The request's `prompt` ends with a sentence written in 繁體 — see ./prompt.ts,
+ * which owns that side of it. Whisper reads the field as the text immediately
+ * preceding the audio and continues in its style, and that is the only lever
+ * the API offers over the script.
  *
  * Then everything that comes back is converted anyway, because a hint is not a
  * guarantee: the model drifts, and each chunk is a fresh request that can drift
@@ -23,9 +24,6 @@
  * matters: 头发 is 頭髮 and 发展 is 發展, and no table of single characters can
  * tell those two 发 apart.
  */
-
-/** Prepended context, in the script we want back. */
-export const TRADITIONAL_HINT = '以下是一段課堂錄音的繁體中文逐字稿。'
 
 /** CJK ideographs, extension A, and the compatibility block. */
 const HAN = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/
