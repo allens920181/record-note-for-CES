@@ -163,7 +163,11 @@ export async function runTranscription(
     }
     const prepared = await prepareChunks(
       file,
-      { bitrateKbps: settings.audioBitrateKbps, chunkSeconds: CHUNK_SECONDS },
+      {
+        bitrateKbps: settings.audioBitrateKbps,
+        chunkSeconds: CHUNK_SECONDS,
+        enhance: settings.enhanceAudio,
+      },
       (p) => {
         const pct = p.ratio >= 0 ? `${Math.round(p.ratio * 100)}%` : ''
         const stage = `${stageLabel[p.stage]}${pct ? ` ${pct}` : ''}`

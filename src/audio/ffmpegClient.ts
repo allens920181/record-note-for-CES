@@ -87,6 +87,26 @@ function noteLine(line: string) {
  */
 const SILENCE_FILTER = 'silencedetect=noise=-32dB:d=0.35'
 
+/**
+ * Levelling for a recording made from a seat rather than a lectern.
+ *
+ * `highpass` drops everything under 80 Hz. No speech lives there — a low male
+ * voice starts around 85 — but air conditioning, traffic and the desk the phone
+ * is lying on all do, and at 32 kbps those are bits taken from the words.
+ *
+ * `dynaudnorm` then lifts the quiet stretches. The gaussian window is
+ * deliberately long — 21 frames of 400 ms, so gain moves over roughly eight
+ * seconds — which makes it slow automatic gain rather than a compressor: a
+ * breath between sentences keeps the gain of the speech around it instead of
+ * having the room tone pumped up into the gap. `m=8` caps the lift at about
+ * 18 dB, enough for a lecturer who has turned to the whiteboard and not so much
+ * that a silent hall becomes something the model tries to transcribe.
+ *
+ * Silence is measured before any of it, so the cut points are chosen from the
+ * dynamics the room actually had.
+ */
+const LEVEL_FILTER = 'highpass=f=80,dynaudnorm=f=400:g=21:p=0.9:m=8'
+
 /** How far from the target length a cut may wander to land in a pause. */
 const DRIFT = 0.25
 
@@ -228,7 +248,7 @@ async function readStarts(
  */
 export async function prepareChunks(
   file: File,
-  opts: { bitrateKbps: number; chunkSeconds: number },
+  opts: { bitrateKbps: number; chunkSeconds: number; enhance: boolean },
   onProgress: (p: PrepareProgress) => void,
 ): Promise<PrepareResult> {
   const ff = await getFFmpeg(onProgress)
@@ -262,9 +282,10 @@ export async function prepareChunks(
       '-vn', // phone recordings are sometimes .mp4 with a video track
       '-ac', '1',
       '-ar', '16000',
-      // Analysis only — the filter reports where the pauses are and passes
-      // every sample through untouched.
-      '-af', SILENCE_FILTER,
+      // silencedetect is analysis only: it reports where the pauses are and
+      // passes every sample through untouched, so it goes first and sees the
+      // room as it was rather than as the leveller left it.
+      '-af', opts.enhance ? `${SILENCE_FILTER},${LEVEL_FILTER}` : SILENCE_FILTER,
       '-c:a', 'libopus',
       '-b:a', `${opts.bitrateKbps}k`,
       FULL,

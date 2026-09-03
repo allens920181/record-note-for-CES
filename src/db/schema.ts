@@ -452,6 +452,15 @@ export interface AppSettings {
   /** Target bitrate for the opus copy we send for transcription. */
   audioBitrateKbps: number
   /**
+   * Even out a recording made from the back of the room before transcribing it.
+   *
+   * A phone on a desk hears a lecturer who turns to the whiteboard, a question
+   * from four rows back, and an air conditioner throughout. Whisper drops the
+   * quiet parts of that — not as garbled words but as missing sentences, which
+   * is the failure that reads as "it just isn't listening".
+   */
+  enhanceAudio: boolean
+  /**
    * How fast recordings play back. Kept here rather than per recording: someone
    * who listens at 1.5× listens to every week at 1.5×, and having to set it
    * again on each file is the whole annoyance.
@@ -475,6 +484,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   language: 'zh',
   globalGlossary: [],
   audioBitrateKbps: 32,
+  enhanceAudio: true,
   playbackRate: 1,
 }
 

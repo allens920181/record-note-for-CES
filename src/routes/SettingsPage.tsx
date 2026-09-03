@@ -247,7 +247,29 @@ export function SettingsPage() {
                 <option value={48}>48 kbps</option>
                 <option value={64}>64 kbps（音質最好）</option>
               </select>
-              <div className="hint">32 kbps 單聲道對語音已經足夠，一小時約 14 MB。</div>
+              <div className="hint">
+                32 kbps 單聲道對語音已經足夠，一小時約 14 MB。
+                錄得不清楚的課，48 kbps 會讓壓縮少吃掉一點字。
+              </div>
+            </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="s-enhance">錄音品質補強</label>
+            <select
+              id="s-enhance"
+              value={settings.enhanceAudio ? 'on' : 'off'}
+              onChange={(e) => patch({ enhanceAudio: e.target.value === 'on' })}
+            >
+              <option value="on">開啟（建議）</option>
+              <option value="off">關閉，送原音</option>
+            </select>
+            <div className="hint">
+              轉錄前先濾掉 80 Hz 以下的冷氣與桌面噪音，再把小聲的段落慢慢拉上來——
+              老師轉身寫白板、後排同學發問，那些是最容易整句消失的地方。
+              增益走得很慢（約八秒），所以句子之間的停頓不會被拱成噪音。
+              <strong>存下來的音檔就是處理過的那一份</strong>，
+              想比較就把它關掉、對同一週按「重新轉錄」。
             </div>
           </div>
 
