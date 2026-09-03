@@ -11,9 +11,15 @@ interface Props {
   disabled: boolean
   /** Handed a finished recording, ready to go through the transcription pipeline. */
   onFinished: (file: File) => void
+  /**
+   * Whether a recording is under way. The pane holding this panel uses it to
+   * take its own way out off screen: unmounting mid-lecture abandons the take,
+   * and a stray click on 取消 is not what anyone meant by that.
+   */
+  onLiveChange?: (live: boolean) => void
 }
 
-export function RecorderPanel({ sessionId, disabled, onFinished }: Props) {
+export function RecorderPanel({ sessionId, disabled, onFinished, onLiveChange }: Props) {
   const ask = useConfirm()
   const recorder = useRef<SessionRecorder | null>(null)
   if (!recorder.current) recorder.current = new SessionRecorder()
@@ -82,6 +88,11 @@ export function RecorderPanel({ sessionId, disabled, onFinished }: Props) {
     })
   }
 
+  const live = state === 'recording' || state === 'paused'
+  useEffect(() => {
+    onLiveChange?.(live)
+  }, [live, onLiveChange])
+
   if (!recorderSupported()) {
     return (
       <div className="notice warn">
@@ -90,7 +101,6 @@ export function RecorderPanel({ sessionId, disabled, onFinished }: Props) {
     )
   }
 
-  const live = state === 'recording' || state === 'paused'
   const pending = (drafts ?? []).filter((d) => d.parts > 0)
 
   return (

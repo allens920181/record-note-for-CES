@@ -124,6 +124,8 @@ export function SessionPage() {
   useEffect(() => {
     setPartId(wantedPart)
     seenParts.current = []
+    setAdding(false)
+    setRecordingLive(false)
   }, [sessionId, wantedPart])
   useEffect(() => {
     const ids = recordings.map((r) => r.id)
@@ -169,6 +171,16 @@ export function SessionPage() {
   const [showOutline, setShowOutline] = useState(false)
   /** Which of the three transcript actions is being confirmed, if any. */
   const [redo, setRedo] = useState<'again' | 'replace' | 'drop' | null>(null)
+  /**
+   * The pane is showing the recorder so another part can be added, rather than
+   * the transcript of the part being read. A lecture with a break in the middle
+   * is two recordings, and the second one should be recordable here — before
+   * this, the only way to add a part was to upload a file someone else's app
+   * had recorded.
+   */
+  const [adding, setAdding] = useState(false)
+  /** Set by the recorder while a take is running; see RecorderPanel. */
+  const [recordingLive, setRecordingLive] = useState(false)
 
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<RunProgress | null>(null)
@@ -708,7 +720,7 @@ export function SessionPage() {
             className={`ptab${narrowPane === 'left' ? ' active' : ''}`}
             onClick={() => setNarrowPane('left')}
           >
-            {hasTranscript ? `逐字稿 · ${segments.length} 句` : '錄音與上傳'}
+            {adding ? '加一段錄音' : hasTranscript ? `逐字稿 · ${segments.length} 句` : '錄音與上傳'}
           </button>
           <button
             className={`ptab${narrowPane === 'note' ? ' active' : ''}`}
@@ -724,14 +736,16 @@ export function SessionPage() {
               <span className="grow">
                 {showFiles
                   ? '這週的講義'
-                  : hasTranscript
+                  : adding
+                    ? '加一段錄音'
+                    : hasTranscript
                     ? // 「段」 now means a recording, so the rows inside one are
                       // counted in 句 — two different things cannot share a word
                       // on the same screen.
-                      `${recordings.length > 1 ? `第 ${partNo} 段 · ` : ''}逐字稿 · ${segments.length} 句`
-                    : '錄音與上傳'}
+                        `${recordings.length > 1 ? `第 ${partNo} 段 · ` : ''}逐字稿 · ${segments.length} 句`
+                      : '錄音與上傳'}
               </span>
-              {hasTranscript && !showFiles && (
+              {hasTranscript && !showFiles && !adding && (
                 <>
                   {/* A mode you are in needs its way out on screen; the way in
                       does not, and eight controls across one strip left the
@@ -842,6 +856,7 @@ export function SessionPage() {
             {!showFiles && recordings.length > 0 && (
               <div className="parts" role="tablist" aria-label="這一週的錄音">
                 {recordings.length > 1 &&
+                  !adding &&
                   recordings.map((r, i) => {
                     const done = transcripts.some((t) => t.recordingId === r.id)
                     const here = r.id === recording?.id
@@ -863,22 +878,38 @@ export function SessionPage() {
                     )
                   })}
                 <span className="spacer" />
-                <label className={`btn ghost sm${busy ? ' is-off' : ''}`}>
-                  ＋ 再加一段錄音
-                  <input
-                    type="file"
-                    accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm,.mp4"
-                    style={{ display: 'none' }}
-                    disabled={busy}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      e.target.value = ''
-                      // No `replaces`: this one joins the week rather than
-                      // taking another's place.
-                      if (file) void handleFile(file)
-                    }}
-                  />
-                </label>
+                {/* Where the work was asked for is where it reports back. The
+                    body keeps showing the part being read, because a transcript
+                    replaced by a progress bar for ten minutes is a transcript
+                    you cannot read while the next part is being made. */}
+                {busy ? (
+                  <>
+                    <span className="small muted">
+                      {progress?.stage ?? '準備中'}
+                      {progress && progress.total > 0
+                        ? `（${progress.done} / ${progress.total}）`
+                        : ''}
+                    </span>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => abortRef.current?.abort()}
+                    >
+                      取消
+                    </button>
+                  </>
+                ) : adding ? (
+                  // No way out while a take is running: leaving unmounts the
+                  // recorder, and the lecture does not pause for a misclick.
+                  !recordingLive && (
+                    <button className="btn ghost sm" onClick={() => setAdding(false)}>
+                      返回逐字稿
+                    </button>
+                  )
+                ) : (
+                  <button className="btn ghost sm" onClick={() => setAdding(true)}>
+                    ＋ 再加一段錄音
+                  </button>
+                )}
               </div>
             )}
 
@@ -896,7 +927,7 @@ export function SessionPage() {
                     />
                   </div>
                 )
-              ) : hasTranscript ? (
+              ) : hasTranscript && !adding ? (
                 <div className="tx-list">
                   {segments.map((seg, i) => {
                     // Filtering hides lines rather than renumbering them: the
@@ -982,10 +1013,11 @@ export function SessionPage() {
                         取消
                       </button>
                     </div>
-                  ) : recording ? (
+                  ) : recording && !adding ? (
                     // Audio on disk with nothing transcribed from it: offering
                     // the recorder here would quietly start a third part, when
                     // what is missing is a transcript for the one already here.
+                    // Unless it was asked for, which is what `adding` means.
                     <div className="card">
                       <h2>這一段還沒有逐字稿</h2>
                       <p className="small muted" style={{ margin: '.4rem 0 .9rem' }}>
@@ -1001,7 +1033,13 @@ export function SessionPage() {
                       <RecorderPanel
                         sessionId={sessionId}
                         disabled={storageReady === false}
-                        onFinished={(file) => void handleFile(file)}
+                        onLiveChange={setRecordingLive}
+                        onFinished={(file) => {
+                          // Back to the transcript: the strip reports the
+                          // transcription from here on.
+                          setAdding(false)
+                          void handleFile(file)
+                        }}
                       />
 
                       <label
@@ -1021,7 +1059,9 @@ export function SessionPage() {
                           // failing at the write.
                           if (storageReady === false) return
                           const file = e.dataTransfer.files[0]
-                          if (file) void handleFile(file)
+                          if (!file) return
+                          setAdding(false)
+                          void handleFile(file)
                         }}
                       >
                         <input
@@ -1031,8 +1071,10 @@ export function SessionPage() {
                           disabled={storageReady === false}
                           onChange={(e) => {
                             const file = e.target.files?.[0]
-                            if (file) void handleFile(file)
                             e.target.value = ''
+                            if (!file) return
+                            setAdding(false)
+                            void handleFile(file)
                           }}
                         />
                         <strong>

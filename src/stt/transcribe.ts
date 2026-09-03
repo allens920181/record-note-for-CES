@@ -6,7 +6,8 @@ import type { PrepareProgress } from '../audio/ffmpegClient'
 import { writeFile } from '../storage/fsRoot'
 import { SttError, transcribeChunk } from './groq'
 import type { SttConfig } from './groq'
-import { TRADITIONAL_HINT, toTraditional } from './traditional'
+import { toTraditional } from './traditional'
+import { buildPrompt, stripPromptEcho } from './prompt'
 
 /** 10 minutes at 32 kbps is ~2.4 MB — far under the 25 MB API limit. */
 export const CHUNK_SECONDS = 600
@@ -27,30 +28,6 @@ const sleep = (ms: number, signal?: AbortSignal) =>
       { once: true },
     )
   })
-
-/**
- * The `prompt` field, which Whisper reads as the text that came just before the
- * audio and continues from. It is not an instruction — the model does not obey
- * it, it imitates it — so both jobs here are done by example: the terms teach it
- * how this course spells things, and the hint's own characters ask for 繁體.
- */
-function transcriptionPrompt(
-  courseTerms: string[],
-  globalTerms: string[],
-  language: string,
-): string {
-  const all = [...new Set([...globalTerms, ...courseTerms])].filter(Boolean)
-  const glossary = all.length > 0 ? `以下為本課程可能出現的專有名詞：${all.join('、')}。` : ''
-  // Only when the audio is known to be Chinese. Under auto-detect a Chinese
-  // sentence in front of an English lecture is a thumb on the scale of the very
-  // thing being detected — and those transcripts are converted afterwards
-  // regardless, which is where the guarantee lives anyway.
-  const hint = language === 'zh' ? TRADITIONAL_HINT : ''
-  // The hint goes last because the endpoint keeps only the final 224 tokens of
-  // a prompt: a course with a long glossary would otherwise push it out of the
-  // request altogether.
-  return `${glossary}${hint}`
-}
 
 async function withRetry<T>(
   run: () => Promise<T>,
@@ -186,7 +163,11 @@ export async function runTranscription(
     }
     const prepared = await prepareChunks(
       file,
-      { bitrateKbps: settings.audioBitrateKbps, chunkSeconds: CHUNK_SECONDS },
+      {
+        bitrateKbps: settings.audioBitrateKbps,
+        chunkSeconds: CHUNK_SECONDS,
+        enhance: settings.enhanceAudio,
+      },
       (p) => {
         const pct = p.ratio >= 0 ? `${Math.round(p.ratio * 100)}%` : ''
         const stage = `${stageLabel[p.stage]}${pct ? ` ${pct}` : ''}`
@@ -221,16 +202,17 @@ export async function runTranscription(
     if (replaces) await deleteRecording(replaces)
 
     // ── 3. transcribe each chunk in turn ───────────────────────────────
+    const prompt = buildPrompt(
+      course?.glossary ?? [],
+      settings.globalGlossary,
+      settings.language,
+    )
     const cfg: SttConfig = {
       baseUrl: settings.sttBaseUrl,
       apiKey: settings.sttApiKey,
       model: settings.sttModel,
       language: settings.language,
-      prompt: transcriptionPrompt(
-        course?.glossary ?? [],
-        settings.globalGlossary,
-        settings.language,
-      ),
+      prompt: prompt.text,
     }
 
     const total = prepared.chunks.length
@@ -250,10 +232,12 @@ export async function runTranscription(
       await setJob({ stage: label, doneChunks: chunk.index })
 
       lastRequestAt = Date.now()
-      // Chunks are CHUNK_SECONDS each except the last, which is whatever is left.
+      // Measured from where the next chunk begins rather than assumed to be
+      // CHUNK_SECONDS: cuts land in whatever pause is nearest the target, so no
+      // two chunks are the same length any more.
       const chunkSeconds = Math.max(
         0,
-        Math.min(CHUNK_SECONDS, Math.round(prepared.durationSec) - chunk.startSec),
+        (prepared.chunks[chunk.index + 1]?.startSec ?? prepared.durationSec) - chunk.startSec,
       )
       const segments = await withRetry(
         () => transcribeChunk(chunk.blob, chunk.fileName, cfg, signal),
@@ -300,7 +284,15 @@ export async function runTranscription(
       // and the one thing left to do is on a menu the reader is about to see.
     }
 
-    // ── 5. store the transcript ────────────────────────────────────────
+    // ── 5. take our own words back out ─────────────────────────────────
+    // After the conversion, not before it. The model writes the prompt back in
+    // whichever script it is currently using, so a 简体 retelling of our 繁體
+    // sentence is only recognisable as a quotation once both are in one script.
+    finished = finished
+      .map((seg) => ({ ...seg, text: stripPromptEcho(seg.text, prompt).trim() }))
+      .filter((seg) => seg.text.length > 0)
+
+    // ── 6. store the transcript ────────────────────────────────────────
     const transcriptId = newId('tr')
     const stamp = Date.now()
     await db.transcripts.put({
